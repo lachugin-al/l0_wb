@@ -1,0 +1,16 @@
+# Директории и файлы сборки
+bin/
+build/
+*.exe
+*.out
+*.log
+
+# Модули Go
+go.sum
+
+# Конфигурационные файлы
+.env
+
+# Docker
+.dockerignore
+docker-compose.override.yml
