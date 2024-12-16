@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"path"
 	"strings"
@@ -66,6 +67,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 func (s *Server) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
 	// Удаляем префикс "/order/" чтобы получить {id}
 	orderID := strings.TrimPrefix(r.URL.Path, "/order/")
+	log.Printf("Received request for order ID: %s", orderID)
 	if orderID == "" {
 		http.Error(w, "order id is required", http.StatusBadRequest)
 		return
@@ -73,12 +75,14 @@ func (s *Server) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
 
 	order := s.cache.Get(orderID)
 	if order == nil {
+		log.Printf("Order not found: %s", orderID)
 		http.Error(w, "order not found", http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(order); err != nil {
+		log.Printf("Failed to encode response: %v", err)
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 	}
 }
