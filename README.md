@@ -90,11 +90,11 @@ l0_wb/
 ### Запуск проекта
 1. Запустите зависимости (PostgreSQL, Zookeeper, Kafka, Kafka UI):
 ```bash
-docker-compose up -d
+  docker-compose up -d
 ```
 2. Соберите и запустите приложение:
 ```bash
-make run
+  make run
 ```
 3. Приложение готово к демонстрации:
    - Применит миграции к БД.
@@ -111,26 +111,26 @@ make run
     - После обработки сообщения сервис сохранит заказ в БД, добавит в кэш.
     - Повторно запросить order_uid через веб-интерфейс или выполнить в терминале команду:
     ```bash
-    curl http://localhost:8081/order/<order_uid>
+      curl http://localhost:8081/order/<order_uid>
     ```
   - При помощи internal/tools 
     - Для генерации и отправки тестового сообщения в kafka, выполните:
     ```bash
-    go run internal/tools/kafka/producer.go
+      go run internal/tools/kafka/producer.go
     ```
 
 ### Тестирование
 - Для запуска unit тестов, выполните:
 ```bash
-make test
+  make test
 ```
-- Для проведения stress тестирования, выполните:
-```bash
-go run internal/tools/ht/stress_tester.go -url=http://localhost:8081/order/<order_uid> -rate=100 -duration=10
+- Для проведения stress тестирования, можно воспользоваться скриптом:
+```
+  go run internal/tools/ht/stress_tester.go -url=http://localhost:8081/order/<order_uid> -rate=1000 -duration=10
 ```
 
 ### Завершение работы
 Для остановки сервисов и остановки приложения:
 ```bash
-docker-compose down
+  docker-compose down
 ```
