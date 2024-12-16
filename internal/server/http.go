@@ -36,8 +36,11 @@ func NewServer(port string, orderCache *cache.OrderCache, staticDir string) *Ser
 	s.registerRoutes(mux)
 
 	s.httpServer = &http.Server{
-		Addr:    ":" + port,
-		Handler: mux,
+		Addr:         ":" + port,
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  10 * time.Second,
 	}
 
 	return s
