@@ -23,7 +23,8 @@ l0_wb/
 │   ├── service/               # Бизнес-логика (SaveOrder, GetOrderByID)
 │   ├── cache/                 # Кэширование заказов in-memory
 │   ├── kafka/                 # Консьюмер для чтения сообщений из Kafka
-│   └── server/                # HTTP-сервер и роуты
+│   ├── server/                # HTTP-сервер и роуты
+│   └── tools/                 # Скрипты и утилиты
 │
 ├── web/                       # Статический контент (index.html)
 ├── docker-compose.yml
@@ -92,9 +93,11 @@ docker-compose up -d
 ```
 2. Соберите и запустите приложение:
 ```bash
-go mod tidy
-make build
 make run
+```
+Если необходимо выполнить сборку с заполнением БД тестовыми данными, выполните:
+```bash
+make run-seed
 ```
 3. Приложение готово к демонстрации:
    - Применит миграции к БД.
