@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -15,25 +14,10 @@ import (
 	"l0_wb/internal/repository"
 	"l0_wb/internal/server"
 	"l0_wb/internal/service"
-	"l0_wb/internal/tools/seeder"
 )
 
 // main инициализирует приложение, настраивает зависимости, запускает Kafka-консьюмер и HTTP-сервер.
 func main() {
-	// Запуск приложения с флагами
-	seed := flag.Bool("seed", false, "Generate seed.sql file and continue running")
-	seedFilePath := flag.String("seed-file", "internal/db/migrations/seed.sql", "Path for the seed file")
-	seedRecordCount := flag.Int("seed-count", 10, "Number of seed records to generate")
-	flag.Parse()
-
-	// Если установлен флаг --seed, генерируем seed.sql
-	if *seed {
-		if err := seeder.GenerateSeedData(*seedFilePath, *seedRecordCount); err != nil {
-			log.Fatalf("Failed to generate seed data: %v", err)
-		}
-		log.Printf("Seed data successfully written to %s", *seedFilePath)
-	}
-
 	// Запуск приложения в стандартном режиме
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
