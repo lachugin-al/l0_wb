@@ -11,7 +11,7 @@ import (
 	"l0_wb/internal/model"
 )
 
-// main скрипт для генерации seed.sql для заполнения БД тестовыми данными
+// main скрипт для генерации seed.sql для заполнения БД тестовыми данными.
 //
 //	go run internal/tools/db/order-seeder.go -seed-file="internal/db/migrations/seed.sql" -seed-count=10
 func main() {

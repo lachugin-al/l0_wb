@@ -12,7 +12,7 @@ import (
 	"l0_wb/internal/model"
 )
 
-// main скрипт для генерации и отправки тестового сообщения в kafka
+// main скрипт для генерации и отправки тестового сообщения в kafka.
 //
 //	go run internal/tools/kafka/producer.go
 func main() {
