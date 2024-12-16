@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title data-i18n="title">Order Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        input {
+            width: 300px;
+            padding: 5px;
+            margin-right: 10px;
+        }
+        button {
+            padding: 6px 12px;
+        }
+        #result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            background: #f0f0f0;
+            padding: 10px;
+        }
+    </style>
+</head>
+<body>
+<h1 data-i18n="header">Order Viewer</h1>
+<p data-i18n="description">Enter an <code>order_uid</code> and click "Show" to get the details.</p>
+<label for="order_id" data-i18n="label">Order ID:</label>
+<input type="text" id="order_id" placeholder="e.g. b563feb7b2b84b6test" data-i18n-placeholder="placeholder">
+<button onclick="getOrder()" data-i18n="button">Show Order</button>
+<pre id="result"></pre>
+<script>
+    const translations = {
+        en: {
+            title: "Order Viewer",
+            header: "Order Viewer",
+            description: 'Enter an <code>order_uid</code> and click "Show" to get the details of the order id.',
+            label: "Order ID:",
+            button: "Show",
+            placeholder: "e.g. b563feb7b2b84b6test",
+            noId: "Please enter a valid order_uid.",
+            fetchError: "Failed to fetch order",
+        },
+        ru: {
+            title: "Просмотр заказа",
+            header: "Просмотр заказа",
+            description: 'Введите <code>order_uid</code> и нажмите "Показать", чтобы получить детали по id заказа.',
+            label: "ID заказа:",
+            button: "Показать",
+            placeholder: "например, b563feb7b2b84b6test",
+            noId: "Пожалуйста, введите действительный order_uid.",
+            fetchError: "Не удалось получить данные заказа",
+        }
+    };
+
+    let currentLang = "en";
+
+    function switchLanguage(lang) {
+        currentLang = lang;
+        const elements = document.querySelectorAll("[data-i18n]");
+        elements.forEach(el => {
+            const key = el.getAttribute("data-i18n");
+            el.innerHTML = translations[lang][key];
+        });
+        const placeholders = document.querySelectorAll("[data-i18n-placeholder]");
+        placeholders.forEach(el => {
+            const key = el.getAttribute("data-i18n-placeholder");
+            el.placeholder = translations[lang][key];
+        });
+    }
+
+    function getOrder() {
+        const id = document.getElementById("order_id").value.trim();
+        if (!id) {
+            document.getElementById("result").textContent = translations[currentLang].noId;
+            return;
+        }
+        fetch("/order/" + encodeURIComponent(id))
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`${translations[currentLang].fetchError}: ${response.status} ${response.statusText}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                document.getElementById("result").textContent = JSON.stringify(data, null, 2);
+            })
+            .catch(err => {
+                document.getElementById("result").textContent = err.message;
+            });
+    }
+
+    document.addEventListener("DOMContentLoaded", () => switchLanguage("ru"));
+</script>
+</body>
+</html>
