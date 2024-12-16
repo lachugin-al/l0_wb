@@ -129,7 +129,7 @@ make test
 ```
 - Для проведения stress тестирования, выполните:
 ```bash
-go run internal/tools/ht/stress_tester.go
+go run internal/tools/ht/stress_tester.go -url=http://localhost:8081/order/{place_order_id} -rate=100 -duration=10
 ```
 
 ### Завершение работы
