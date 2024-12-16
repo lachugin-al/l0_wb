@@ -14,7 +14,7 @@ import (
 // main запускает стресс-тест с использованием Vegeta.
 //
 //	Пример запуска:
-//	go run internal/tools/stress_tester.go -url=http://localhost:8081/order/test-0 -rate=100 -duration=30 -output=stress_test_results.json
+//	go run internal/tools/ht/stress_tester.go -url=http://localhost:8081/order/test-0 -rate=100 -duration=30 -output=stress_test_results.json
 func main() {
 	// Параметры командной строки
 	url := flag.String("url", "http://localhost:8081/order/test-0", "Target URL for stress testing")

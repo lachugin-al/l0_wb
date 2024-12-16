@@ -94,7 +94,7 @@ docker-compose up -d
 ```
 2. Если необходимо сгенерировать тестовые данные для миграции, выполните:
 ```bash
-go run internal/tools/db/order-seeder.go
+go run internal/tools/db/order_seed_generator.go
 ```
 3. Соберите и запустите приложение:
 ```bash
@@ -129,7 +129,7 @@ make test
 ```
 - Для проведения stress тестирования, выполните:
 ```bash
-go run internal/tools/tester/stress_tester.go
+go run internal/tools/ht/stress_tester.go
 ```
 
 ### Завершение работы

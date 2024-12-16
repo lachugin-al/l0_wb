@@ -13,7 +13,7 @@ import (
 
 // main скрипт для генерации seed.sql для заполнения БД тестовыми данными.
 //
-//	go run internal/tools/db/order-seeder.go -seed-file="internal/db/migrations/seed.sql" -seed-count=10
+//	go run internal/tools/db/order_seed_generator.go -seed-file="internal/db/migrations/seed.sql" -seed-count=10
 func main() {
 	// Параметры командной строки
 	seedFilePath := flag.String("seed-file", "internal/db/migrations/seed.sql", "Path for the seed file")
