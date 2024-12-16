@@ -1,6 +1,7 @@
-package seeder
+package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -9,6 +10,26 @@ import (
 	"github.com/brianvoe/gofakeit/v6"
 	"l0_wb/internal/model"
 )
+
+func main() {
+	// Параметры командной строки
+	seedFilePath := flag.String("seed-file", "internal/db/migrations/seed.sql", "Path for the seed file")
+	seedRecordCount := flag.Int("seed-count", 10, "Number of seed records to generate")
+	flag.Parse()
+
+	// Проверяем, что файл не пустой
+	if *seedFilePath == "" {
+		log.Fatal("File path is required")
+	}
+
+	// Генерируем seed-данные
+	log.Printf("Generating %d records into %s", *seedRecordCount, *seedFilePath)
+	if err := GenerateSeedData(*seedFilePath, *seedRecordCount); err != nil {
+		log.Fatalf("Failed to generate seed data: %v", err)
+	}
+
+	log.Println("Seed data generation completed successfully")
+}
 
 // GenerateSeedData генерирует случайные данные для всех таблиц и добавляет их в seed.sql.
 func GenerateSeedData(filePath string, recordCount int) error {
