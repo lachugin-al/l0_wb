@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/segmentio/kafka-go"
+	"log"
 
 	"l0_wb/internal/cache"
 	"l0_wb/internal/model"
@@ -61,14 +62,14 @@ func (c *Consumer) Run(ctx context.Context) error {
 		var order model.Order
 		// Декодируем JSON-сообщение в структуру заказа
 		if err := json.Unmarshal(m.Value, &order); err != nil {
-			fmt.Printf("failed to unmarshal order: %v\n", err)
+			log.Printf("failed to unmarshal order: %v\n", err)
 			continue
 		}
 
 		// Сохраняем заказ в базу данных через OrderService
 		err = c.orderService.SaveOrder(ctx, &order)
 		if err != nil {
-			fmt.Printf("failed to save order: %v\n", err)
+			log.Printf("failed to save order: %v\n", err)
 			continue
 		}
 
