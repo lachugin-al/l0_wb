@@ -122,8 +122,13 @@ make run
   ```
 
 ### Тестирование
+- Для запуска unit тестов, выполните:
 ```bash
 make test
+```
+- Для проведения stress тестирования, выполните:
+```bash
+go run internal/tools/tester/stress_tester.go
 ```
 
 ### Завершение работы
