@@ -3,13 +3,14 @@ package server
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"net/http"
 	"path"
 	"strings"
 	"time"
 
+	"go.uber.org/zap"
 	"l0_wb/internal/cache"
+	"l0_wb/internal/util"
 )
 
 // Server представляет HTTP-сервер для работы с заказами.
@@ -17,6 +18,7 @@ type Server struct {
 	httpServer *http.Server
 	cache      *cache.OrderCache
 	staticDir  string
+	logger     *zap.Logger
 }
 
 // NewServer создаёт новый экземпляр Server.
@@ -28,10 +30,14 @@ type Server struct {
 //	Возвращает:
 //	- *Server: экземпляр HTTP-сервера.
 func NewServer(port string, orderCache *cache.OrderCache, staticDir string) *Server {
+	logger := util.GetLogger()
+
 	s := &Server{
 		cache:     orderCache,
 		staticDir: staticDir,
+		logger:    logger,
 	}
+
 	mux := http.NewServeMux()
 	s.registerRoutes(mux)
 
@@ -43,6 +49,7 @@ func NewServer(port string, orderCache *cache.OrderCache, staticDir string) *Ser
 		IdleTimeout:  10 * time.Second,
 	}
 
+	logger.Info("HTTP server initialized", zap.String("port", port))
 	return s
 }
 
@@ -57,6 +64,7 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Статический контент (index.html)
 	if s.staticDir != "" {
 		mux.HandleFunc("/", s.handleStatic)
+		s.logger.Info("Static content route registered", zap.String("staticDir", s.staticDir))
 	}
 }
 
@@ -70,22 +78,24 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 func (s *Server) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
 	// Удаляем префикс "/order/" чтобы получить {id}
 	orderID := strings.TrimPrefix(r.URL.Path, "/order/")
-	log.Printf("Received request for order ID: %s", orderID)
+	s.logger.Info("Received order request", zap.String("orderID", orderID))
+
 	if orderID == "" {
 		http.Error(w, "order id is required", http.StatusBadRequest)
+		s.logger.Warn("Order ID is missing in request")
 		return
 	}
 
 	order := s.cache.Get(orderID)
 	if order == nil {
-		log.Printf("Order not found: %s", orderID)
 		http.Error(w, "order not found", http.StatusNotFound)
+		s.logger.Warn("Order not found", zap.String("orderID", orderID))
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(order); err != nil {
-		log.Printf("Failed to encode response: %v", err)
+		s.logger.Error("Failed to encode response", zap.Error(err))
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 	}
 }
@@ -102,6 +112,8 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 		filePath = "/index.html"
 	}
 	fp := path.Join(s.staticDir, filePath)
+
+	s.logger.Info("Serving static file", zap.String("filePath", fp))
 	http.ServeFile(w, r, fp)
 }
 
@@ -115,6 +127,7 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 func (s *Server) Start(ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
+		s.logger.Info("HTTP server is starting")
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- err
 		}
@@ -122,13 +135,16 @@ func (s *Server) Start(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second) // Остановка сервера по сигналу из контекста
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := s.httpServer.Shutdown(shutdownCtx); err != nil {
+			s.logger.Error("Failed to shut down server", zap.Error(err))
 			return err
 		}
+		s.logger.Info("HTTP server shut down gracefully")
 		return nil
 	case err := <-errCh:
-		return err // Ошибка запуска сервера
+		s.logger.Error("HTTP server encountered an error", zap.Error(err))
+		return err
 	}
 }

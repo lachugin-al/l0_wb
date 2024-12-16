@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"time"
 
+	"go.uber.org/zap"
 	"l0_wb/internal/model"
 	"l0_wb/internal/repository"
+	"l0_wb/internal/util"
 )
 
 // OrderService определяет бизнес-логику для работы с заказами.
@@ -25,6 +27,7 @@ type orderService struct {
 	deliveriesRepo repository.DeliveriesRepository
 	paymentsRepo   repository.PaymentsRepository
 	itemsRepo      repository.ItemsRepository
+	logger         *zap.Logger
 }
 
 // NewOrderService создает новый экземпляр orderService.
@@ -44,12 +47,14 @@ func NewOrderService(
 	paymentsRepo repository.PaymentsRepository,
 	itemsRepo repository.ItemsRepository,
 ) OrderService {
+	logger := util.GetLogger()
 	return &orderService{
 		db:             db,
 		ordersRepo:     ordersRepo,
 		deliveriesRepo: deliveriesRepo,
 		paymentsRepo:   paymentsRepo,
 		itemsRepo:      itemsRepo,
+		logger:         logger,
 	}
 }
 
@@ -66,15 +71,19 @@ func NewOrderService(
 //	- error: ошибка, если произошел сбой на любом этапе.
 func (s *orderService) SaveOrder(ctx context.Context, order *model.Order) error {
 	if order == nil {
+		s.logger.Error("SaveOrder: order is nil")
 		return errors.New("order is nil")
 	}
 	if order.OrderUID == "" {
+		s.logger.Error("SaveOrder: order_uid is empty")
 		return errors.New("order_uid is empty")
 	}
 	if len(order.Items) == 0 {
+		s.logger.Error("SaveOrder: order has no items", zap.String("orderUID", order.OrderUID))
 		return errors.New("order has no items")
 	}
 	if order.Delivery.Name == "" || order.Delivery.Phone == "" {
+		s.logger.Error("SaveOrder: invalid delivery data", zap.String("orderUID", order.OrderUID))
 		return errors.New("invalid delivery data")
 	}
 
@@ -86,38 +95,45 @@ func (s *orderService) SaveOrder(ctx context.Context, order *model.Order) error 
 	// Начало транзакции
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		s.logger.Error("SaveOrder: begin transaction failed", zap.Error(err))
 		return fmt.Errorf("begin transaction failed: %w", err)
 	}
 
 	// Вставка данных в таблицы order
 	if err := s.ordersRepoInsertTx(tx, order); err != nil {
+		s.logger.Error("SaveOrder: failed to insert order", zap.String("orderUID", order.OrderUID), zap.Error(err))
 		tx.Rollback()
 		return err
 	}
 
 	// Вставка данных в таблицы delivery
 	if err := s.deliveriesRepoInsertTx(tx, &order.Delivery, order.OrderUID); err != nil {
+		s.logger.Error("SaveOrder: failed to insert delivery", zap.String("orderUID", order.OrderUID), zap.Error(err))
 		tx.Rollback()
 		return err
 	}
 
 	// Вставка данных в таблицы payment
 	if err := s.paymentsRepoInsertTx(tx, &order.Payment, order.OrderUID); err != nil {
+		s.logger.Error("SaveOrder: failed to insert payment", zap.String("orderUID", order.OrderUID), zap.Error(err))
 		tx.Rollback()
 		return err
 	}
 
 	// Вставка данных в таблицы items
 	if err := s.itemsRepoInsertTx(tx, order.Items, order.OrderUID); err != nil {
+		s.logger.Error("SaveOrder: failed to insert items", zap.String("orderUID", order.OrderUID), zap.Error(err))
 		tx.Rollback()
 		return err
 	}
 
 	// Завершаем транзакцию
 	if err := tx.Commit(); err != nil {
+		s.logger.Error("SaveOrder: commit transaction failed", zap.String("orderUID", order.OrderUID), zap.Error(err))
 		return fmt.Errorf("commit transaction failed: %w", err)
 	}
 
+	s.logger.Info("SaveOrder: order saved successfully", zap.String("orderUID", order.OrderUID))
 	return nil
 }
 

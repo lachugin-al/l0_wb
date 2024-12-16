@@ -3,23 +3,33 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"go.uber.org/zap"
 	"time"
 
 	"github.com/brianvoe/gofakeit/v6"
 	"github.com/segmentio/kafka-go"
 	"l0_wb/internal/config"
 	"l0_wb/internal/model"
+	"l0_wb/internal/util"
 )
 
 // main скрипт для генерации и отправки тестового сообщения в kafka.
 //
 //	go run internal/tools/kafka/producer.go
 func main() {
+	// Инициализируем логгер, если он еще не был инициализирован
+	if err := util.InitLogger(); err != nil {
+		panic("Failed to initialize logger: " + err.Error())
+	}
+	logger := util.GetLogger()
+	defer util.SyncLogger()
+
+	logger.Info("Starting Kafka producer")
+
 	// Загружаем конфигурацию
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logger.Fatal("Failed to load config", zap.Error(err))
 	}
 
 	// Создаем Kafka writer
@@ -28,7 +38,13 @@ func main() {
 		Topic:    cfg.KafkaTopic,
 		Balancer: &kafka.LeastBytes{},
 	}
-	defer writer.Close()
+	defer func() {
+		if err := writer.Close(); err != nil {
+			logger.Warn("Failed to close Kafka writer", zap.Error(err))
+		}
+	}()
+
+	logger.Info("Kafka writer initialized", zap.String("topic", cfg.KafkaTopic))
 
 	// Инициализация gofakeit
 	gofakeit.Seed(0)
@@ -39,7 +55,7 @@ func main() {
 	// Преобразуем сообщение в JSON
 	data, err := json.Marshal(order)
 	if err != nil {
-		log.Fatalf("Failed to marshal order: %v", err)
+		logger.Fatal("Failed to marshal order", zap.Error(err))
 	}
 
 	// Публикуем сообщение в Kafka
@@ -48,9 +64,9 @@ func main() {
 		Value: data,
 	})
 	if err != nil {
-		log.Printf("Failed to write message to Kafka: %v", err)
+		logger.Error("Failed to write message to Kafka", zap.Error(err))
 	} else {
-		log.Printf("Message published to topic '%s': %s", cfg.KafkaTopic, order.OrderUID)
+		logger.Info("Message published successfully", zap.String("orderUID", order.OrderUID))
 	}
 
 }

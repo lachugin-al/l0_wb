@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"go.uber.org/zap"
 	"l0_wb/internal/cache"
 	"l0_wb/internal/config"
 	"l0_wb/internal/db"
@@ -14,10 +14,19 @@ import (
 	"l0_wb/internal/repository"
 	"l0_wb/internal/server"
 	"l0_wb/internal/service"
+	"l0_wb/internal/util"
 )
 
 // main инициализирует приложение, настраивает зависимости, запускает Kafka-консьюмер и HTTP-сервер.
 func main() {
+	// Инициализация логгера
+	if err := util.InitLogger(); err != nil {
+		panic("failed to initialize logger: " + err.Error())
+	}
+	defer util.SyncLogger()
+
+	logger := util.GetLogger()
+
 	// Запуск приложения в стандартном режиме
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -33,13 +42,13 @@ func main() {
 	// Загружаем конфигурацию
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		logger.Fatal("failed to load config: %v", zap.Error(err))
 	}
 
 	// Инициализация БД
 	database, err := db.InitDB(cfg)
 	if err != nil {
-		log.Fatalf("failed to initialize database: %v", err)
+		logger.Fatal("failed to initialize database: %v", zap.Error(err))
 	}
 
 	// Создание репозиториев
@@ -51,7 +60,7 @@ func main() {
 	// Инициализация кэша и загрузка данных из БД
 	orderCache := cache.NewOrderCache()
 	if err := orderCache.LoadFromDB(ctx, ordersRepo, deliveriesRepo, paymentsRepo, itemsRepo, database); err != nil {
-		log.Printf("failed to load cache from DB: %v", err)
+		logger.Warn("failed to load cache from DB: %v", zap.Error(err))
 	}
 
 	// Инициализация сервисов
@@ -61,7 +70,7 @@ func main() {
 	consumer := kafka.NewConsumer(cfg.KafkaBrokers, cfg.KafkaTopic, cfg.KafkaGroupID, orderService, orderCache)
 	go func() {
 		if err := consumer.Run(ctx); err != nil {
-			log.Printf("kafka consumer stopped with error: %v", err)
+			logger.Fatal("kafka consumer stopped with error: %v", zap.Error(err))
 			cancel()
 		}
 	}()
@@ -71,6 +80,6 @@ func main() {
 	srv := server.NewServer(cfg.HTTPPort, orderCache, "web")
 
 	if err := srv.Start(ctx); err != nil {
-		log.Printf("http server stopped with error: %v", err)
+		logger.Fatal("http server stopped with error: %v", zap.Error(err))
 	}
 }

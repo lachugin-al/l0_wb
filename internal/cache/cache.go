@@ -5,14 +5,17 @@ import (
 	"database/sql"
 	"sync"
 
+	"go.uber.org/zap"
 	"l0_wb/internal/model"
 	"l0_wb/internal/repository"
+	"l0_wb/internal/util"
 )
 
 // OrderCache представляет собой кэш для хранения заказов в памяти.
 type OrderCache struct {
-	mu    sync.RWMutex            // Мьютекс для синхронизации доступа к кэшу
-	cache map[string]*model.Order // Словарь, где ключ — order_uid, значение — объект заказа
+	mu     sync.RWMutex            // Мьютекс для синхронизации доступа к кэшу
+	cache  map[string]*model.Order // Словарь, где ключ — order_uid, значение — объект заказа
+	logger *zap.Logger
 }
 
 // NewOrderCache создает новый пустой кэш заказов.
@@ -21,7 +24,8 @@ type OrderCache struct {
 //	- *OrderCache: экземпляр кэша.
 func NewOrderCache() *OrderCache {
 	return &OrderCache{
-		cache: make(map[string]*model.Order),
+		cache:  make(map[string]*model.Order),
+		logger: util.GetLogger(),
 	}
 }
 
@@ -45,18 +49,22 @@ func (c *OrderCache) LoadFromDB(
 	itemsRepo repository.ItemsRepository,
 	db *sql.DB,
 ) error {
+	c.logger.Info("Starting to load orders into cache")
 	// TODO если нет возможности получить все order_uid из БД, реализовать метод GetAllOrderIDs() из ordersRepo
 
 	// Получаем список всех order_uid из БД
 	orderUIDs, err := getAllOrderUIDs(db)
 	if err != nil {
+		c.logger.Error("Failed to fetch order UIDs from database", zap.Error(err))
 		return err
 	}
+	c.logger.Info("Fetched order UIDs", zap.Int("count", len(orderUIDs)))
 
 	// Загружаем полный заказ для каждого order_uid и сохраняем в кэш
 	for _, uid := range orderUIDs {
 		o, err := loadFullOrder(ctx, uid, ordersRepo, deliveriesRepo, paymentsRepo, itemsRepo)
 		if err != nil {
+			c.logger.Warn("Failed to load order", zap.String("order_uid", uid), zap.Error(err))
 			continue
 		}
 		c.mu.Lock()
@@ -64,6 +72,7 @@ func (c *OrderCache) LoadFromDB(
 		c.mu.Unlock()
 	}
 
+	c.logger.Info("Finished loading orders into cache", zap.Int("cached_orders", len(c.cache)))
 	return nil
 }
 
@@ -76,7 +85,11 @@ func (c *OrderCache) LoadFromDB(
 func (c *OrderCache) Get(orderUID string) *model.Order {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.cache[orderUID]
+	order := c.cache[orderUID]
+	if order == nil {
+		c.logger.Warn("Order not found in cache", zap.String("order_uid", orderUID))
+	}
+	return order
 }
 
 // Set добавляет или обновляет заказ в кэше.
@@ -87,6 +100,7 @@ func (c *OrderCache) Set(order *model.Order) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache[order.OrderUID] = order
+	c.logger.Info("Order added to cache", zap.String("order_uid", order.OrderUID))
 }
 
 // loadFullOrder загружает полный заказ из базы данных, включая связанные данные (доставка, оплата, товары).

@@ -4,10 +4,17 @@ import (
 	"testing"
 
 	"l0_wb/internal/model"
+	"l0_wb/internal/util"
 )
 
 // TestOrderCache проверяет базовые операции (Set и Get) работы с OrderCache.
 func TestOrderCache(t *testing.T) {
+	err := util.InitLogger()
+	if err != nil {
+		t.Fatalf("failed to initialize logger: %v", err)
+	}
+	defer util.SyncLogger()
+
 	cache := NewOrderCache()
 
 	// Добавляем тестовый заказ в кэш
