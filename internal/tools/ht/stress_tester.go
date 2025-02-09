@@ -1,3 +1,4 @@
+// main provides stress-tester cli util.
 package main
 
 import (
@@ -6,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	vegeta "github.com/tsenart/vegeta/v12/lib"
@@ -62,18 +65,34 @@ func RunStressTest(url string, rate, duration int, output string) error {
 	}
 	metrics.Close()
 
-	// Запись метрик
-	file, err := os.Create(output)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer file.Close()
+	// Разрешенная директория
+	allowedDir := "/app/results/"
 
-	// Экспорт метрик в JSON
-	if err := json.NewEncoder(file).Encode(metrics); err != nil {
+	// Очистка пути
+	cleanPath := filepath.Clean(output)
+	absPath, err := filepath.Abs(cleanPath)
+	if err != nil {
+		return fmt.Errorf("invalid output path: %w", err)
+	}
+
+	// Проверяем, что путь находится внутри allowedDir
+	relPath, err := filepath.Rel(allowedDir, absPath)
+	if err != nil || strings.HasPrefix(relPath, "..") {
+		return fmt.Errorf("attempt to write outside allowed directory: %s", absPath)
+	}
+
+	// Кодируем метрики в JSON
+	data, err := json.Marshal(metrics)
+	if err != nil {
 		return fmt.Errorf("failed to encode metrics to JSON: %w", err)
 	}
 
-	log.Printf("Stress test results saved to %s", output)
+	// Безопасная запись в файл
+	err = os.WriteFile(absPath, data, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to write data to file: %w", err)
+	}
+
+	log.Printf("Stress test results saved to %s", absPath)
 	return nil
 }

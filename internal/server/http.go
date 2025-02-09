@@ -1,8 +1,10 @@
+// Package server provides http server.
 package server
 
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"path"
 	"strings"
@@ -104,7 +106,7 @@ func (s *Server) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleGetOrders возвращает список всех заказов из кэша.
-func (s *Server) handleGetOrders(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetOrders(w http.ResponseWriter, _ *http.Request) {
 	s.logger.Info("Received request to fetch all orders")
 
 	orders := s.cache.GetAll()
@@ -122,7 +124,7 @@ func (s *Server) handleGetOrders(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSendTestOrder отправляет тестовый заказ в Kafka.
-func (s *Server) handleSendTestOrder(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSendTestOrder(w http.ResponseWriter, _ *http.Request) {
 	s.logger.Info("Received request to send test order")
 
 	orderUID, err := kafka.ProduceTestMessage()
@@ -133,7 +135,9 @@ func (s *Server) handleSendTestOrder(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Test order sent successfully! Order UID: " + orderUID))
+	if _, err := w.Write([]byte("Test order sent successfully! Order UID: " + orderUID)); err != nil {
+		log.Printf("failed to write response: %v", err)
+	}
 }
 
 // handleStatic раздаёт статические файлы из s.staticDir.

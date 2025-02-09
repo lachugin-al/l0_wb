@@ -1,13 +1,14 @@
+// Package db provides database service.
 package db
 
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
-
+	// Importing postgres driver for database/sql
 	_ "github.com/lib/pq"
+
 	"go.uber.org/zap"
 	"l0_wb/internal/config"
 	"l0_wb/internal/util"
@@ -68,17 +69,43 @@ func runMigrations(db *sql.DB) error {
 		return fmt.Errorf("failed to find migration files: %w", err)
 	}
 
+	// Получаем абсолютный путь к папке миграций.
+	absDir, err := filepath.Abs(migrationsDir)
+	if err != nil {
+		logger.Error("Failed to resolve absolute path for migrations directory", zap.String("dir", migrationsDir), zap.Error(err))
+		return fmt.Errorf("failed to resolve absolute path for migrations directory %s: %w", migrationsDir, err)
+	}
+
 	for _, file := range files {
-		log.Printf("Applying migration: %s", file)
-		content, err := os.ReadFile(file)
+		// Очистка пути для предотвращения path traversal атак
+		cleanFile := filepath.Clean(file)
+		absFile, err := filepath.Abs(cleanFile)
 		if err != nil {
-			logger.Error("Failed to read migration file", zap.String("file", file), zap.Error(err))
-			return fmt.Errorf("failed to read migration file %s: %w", file, err)
+			logger.Error("Failed to resolve absolute path", zap.String("file", cleanFile), zap.Error(err))
+			return fmt.Errorf("failed to resolve absolute path for %s: %w", cleanFile, err)
 		}
 
+		// Проверяем, что файл действительно находится в папке миграций
+		relPath, err := filepath.Rel(absDir, absFile)
+		if err != nil || relPath == "" || relPath[0] == '.' {
+			logger.Error("File is outside the migrations directory", zap.String("file", absFile))
+			return fmt.Errorf("file %s is outside the migrations directory", absFile)
+		}
+
+		logger.Info("Applying migration", zap.String("file", absFile))
+
+		// Безопасное чтение файла
+		//nolint:gosec // Безопасность гарантирована проверкой пути выше
+		content, err := os.ReadFile(absFile)
+		if err != nil {
+			logger.Error("Failed to read migration file", zap.String("file", absFile), zap.Error(err))
+			return fmt.Errorf("failed to read migration file %s: %w", absFile, err)
+		}
+
+		// Выполняем SQL-запрос
 		if _, err := db.Exec(string(content)); err != nil {
-			logger.Error("Failed to execute migration", zap.String("file", file), zap.Error(err))
-			return fmt.Errorf("failed to execute migration %s: %w", file, err)
+			logger.Error("Failed to execute migration", zap.String("file", absFile), zap.Error(err))
+			return fmt.Errorf("failed to execute migration %s: %w", absFile, err)
 		}
 	}
 

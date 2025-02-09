@@ -2,7 +2,7 @@ APP_NAME = l0_wb
 CMD_DIR = ./cmd/app
 GO_FILES := $(shell find . -type f -name '*.go' -not -path "./vendor/*")
 
-.PHONY: all build run test clean run-seed seed
+.PHONY: all build run test clean run-seed seed lint
 
 all: build
 
@@ -17,6 +17,10 @@ run: build
 test:
 	@echo ">>> Running tests..."
 	go test -v ./...
+
+lint:
+	@echo ">>> Running linters..."
+	golangci-lint run --timeout=5m
 
 clean:
 	@echo ">>> Cleaning up..."

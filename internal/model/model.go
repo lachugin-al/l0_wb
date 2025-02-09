@@ -1,3 +1,4 @@
+// Package model provides order model.
 package model
 
 import "time"

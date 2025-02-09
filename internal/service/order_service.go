@@ -1,3 +1,4 @@
+// Package service provides order service.
 package service
 
 import (
@@ -70,70 +71,96 @@ func NewOrderService(
 //	Возвращает:
 //	- error: ошибка, если произошел сбой на любом этапе.
 func (s *orderService) SaveOrder(ctx context.Context, order *model.Order) error {
-	if order == nil {
-		s.logger.Error("SaveOrder: order is nil")
-		return errors.New("order is nil")
-	}
-	if order.OrderUID == "" {
-		s.logger.Error("SaveOrder: order_uid is empty")
-		return errors.New("order_uid is empty")
-	}
-	if len(order.Items) == 0 {
-		s.logger.Error("SaveOrder: order has no items", zap.String("orderUID", order.OrderUID))
-		return errors.New("order has no items")
-	}
-	if order.Delivery.Name == "" || order.Delivery.Phone == "" {
-		s.logger.Error("SaveOrder: invalid delivery data", zap.String("orderUID", order.OrderUID))
-		return errors.New("invalid delivery data")
+	// Валидация заказа перед сохранением
+	if err := s.validateOrder(order); err != nil {
+		return err
 	}
 
-	// Если дата создания заказа не указана, устанавливаем текущее время
+	// Устанавливаем дату создания заказа, если она не указана
 	if order.DateCreated.IsZero() {
 		order.DateCreated = time.Now().UTC()
 	}
 
-	// Начало транзакции
+	// Открываем транзакцию
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		s.logger.Error("SaveOrder: begin transaction failed", zap.Error(err))
 		return fmt.Errorf("begin transaction failed: %w", err)
 	}
 
-	// Вставка данных в таблицы order
-	if err := s.ordersRepoInsertTx(tx, order); err != nil {
-		s.logger.Error("SaveOrder: failed to insert order", zap.String("orderUID", order.OrderUID), zap.Error(err))
-		tx.Rollback()
+	// Отложенный откат транзакции при ошибке
+	defer func() {
+		if p := recover(); p != nil {
+			_ = tx.Rollback()
+			panic(p)
+		} else if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// Вставка данных заказа
+	if err = s.insertOrderData(tx, order); err != nil {
 		return err
 	}
 
-	// Вставка данных в таблицы delivery
-	if err := s.deliveriesRepoInsertTx(tx, &order.Delivery, order.OrderUID); err != nil {
-		s.logger.Error("SaveOrder: failed to insert delivery", zap.String("orderUID", order.OrderUID), zap.Error(err))
-		tx.Rollback()
-		return err
-	}
-
-	// Вставка данных в таблицы payment
-	if err := s.paymentsRepoInsertTx(tx, &order.Payment, order.OrderUID); err != nil {
-		s.logger.Error("SaveOrder: failed to insert payment", zap.String("orderUID", order.OrderUID), zap.Error(err))
-		tx.Rollback()
-		return err
-	}
-
-	// Вставка данных в таблицы items
-	if err := s.itemsRepoInsertTx(tx, order.Items, order.OrderUID); err != nil {
-		s.logger.Error("SaveOrder: failed to insert items", zap.String("orderUID", order.OrderUID), zap.Error(err))
-		tx.Rollback()
-		return err
-	}
-
-	// Завершаем транзакцию
-	if err := tx.Commit(); err != nil {
+	// Подтверждаем транзакцию
+	if err = tx.Commit(); err != nil {
 		s.logger.Error("SaveOrder: commit transaction failed", zap.String("orderUID", order.OrderUID), zap.Error(err))
 		return fmt.Errorf("commit transaction failed: %w", err)
 	}
 
 	s.logger.Info("SaveOrder: order saved successfully", zap.String("orderUID", order.OrderUID))
+	return nil
+}
+
+// validateOrder выполняет базовую валидацию заказа.
+//
+// Параметры:
+// - order: объект заказа.
+//
+// Возвращает:
+// - error: если заказ некорректен.
+func (s *orderService) validateOrder(order *model.Order) error {
+	if order == nil {
+		return errors.New("order is nil")
+	}
+	if order.OrderUID == "" {
+		return errors.New("order_uid is empty")
+	}
+	if len(order.Items) == 0 {
+		return errors.New("order has no items")
+	}
+	if order.Delivery.Name == "" || order.Delivery.Phone == "" {
+		return errors.New("invalid delivery data")
+	}
+	return nil
+}
+
+// insertOrderData выполняет вставку данных заказа в базу данных в рамках транзакции.
+//
+// Параметры:
+// - tx: активная транзакция базы данных.
+// - order: объект заказа.
+//
+// Возвращает:
+// - error: если произошла ошибка при вставке.
+func (s *orderService) insertOrderData(tx *sql.Tx, order *model.Order) error {
+	if err := s.ordersRepoInsertTx(tx, order); err != nil {
+		return err
+	}
+
+	if err := s.deliveriesRepoInsertTx(tx, &order.Delivery, order.OrderUID); err != nil {
+		return err
+	}
+
+	if err := s.paymentsRepoInsertTx(tx, &order.Payment, order.OrderUID); err != nil {
+		return err
+	}
+
+	if err := s.itemsRepoInsertTx(tx, order.Items, order.OrderUID); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -145,7 +172,7 @@ func (s *orderService) SaveOrder(ctx context.Context, order *model.Order) error 
 //	Возвращает:
 //	- *model.Order: объект заказа.
 //	- error: ошибка, если произошел сбой на любом этапе.
-func (s *orderService) GetOrderByID(ctx context.Context, orderUID string) (*model.Order, error) {
+func (s *orderService) GetOrderByID(_ context.Context, orderUID string) (*model.Order, error) {
 	order, err := s.ordersRepo.GetByID(orderUID)
 	if err != nil {
 		return nil, err

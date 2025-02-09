@@ -1,3 +1,4 @@
+// main provides producer cli util.
 package main
 
 import (

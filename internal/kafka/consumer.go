@@ -1,3 +1,4 @@
+// Package kafka provides kafka consumer.
 package kafka
 
 import (

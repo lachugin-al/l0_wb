@@ -1,3 +1,4 @@
+// Package kafka provides kafka producer.
 package kafka
 
 import (

@@ -1,8 +1,10 @@
+// Package cache provides in memory cache service.
 package cache
 
 import (
 	"context"
 	"database/sql"
+	"log"
 	"sync"
 
 	"go.uber.org/zap"
@@ -116,7 +118,7 @@ func (c *OrderCache) Set(order *model.Order) {
 //	- *model.Order: заполненный объект заказа.
 //	- error: ошибку, если не удалось загрузить данные.
 func loadFullOrder(
-	ctx context.Context,
+	_ context.Context,
 	orderUID string,
 	ordersRepo repository.OrdersRepository,
 	deliveriesRepo repository.DeliveriesRepository,
@@ -176,7 +178,11 @@ func getAllOrderUIDs(db *sql.DB) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("failed to close rows: %v", err)
+		}
+	}()
 
 	var uids []string
 	for rows.Next() {

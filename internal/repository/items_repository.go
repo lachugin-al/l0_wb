@@ -2,6 +2,7 @@ package repository
 
 import (
 	"database/sql"
+	"log"
 
 	"l0_wb/internal/model"
 )
@@ -72,7 +73,11 @@ func (r *itemsRepository) GetByOrderID(orderUID string) ([]model.Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("failed to close rows: %v", err)
+		}
+	}()
 
 	var items []model.Item
 	for rows.Next() {

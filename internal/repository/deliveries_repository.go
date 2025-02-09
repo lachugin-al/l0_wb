@@ -1,3 +1,4 @@
+// Package repository provides repository service.
 package repository
 
 import (
