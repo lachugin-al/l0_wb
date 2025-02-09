@@ -53,7 +53,7 @@ func RunStressTest(url string, rate, duration int, output string) error {
 		Method: "GET",
 		URL:    url,
 	})
-	attacker := vegeta.NewAttacker(vegeta.Connections(5000))
+	attacker := vegeta.NewAttacker(vegeta.Connections(10000))
 
 	// Сбор метрик
 	var metrics vegeta.Metrics
