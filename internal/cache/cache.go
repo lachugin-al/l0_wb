@@ -147,6 +147,23 @@ func loadFullOrder(
 	return o, nil
 }
 
+// GetAll возвращает список всех заказов, хранящихся в кэше.
+//
+//	Возвращает:
+//	- []model.Order: список всех заказов.
+func (c *OrderCache) GetAll() []*model.Order {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	orders := make([]*model.Order, 0, len(c.cache))
+	for _, order := range c.cache {
+		orders = append(orders, order)
+	}
+
+	c.logger.Info("Fetched all orders from cache", zap.Int("count", len(orders)))
+	return orders
+}
+
 // getAllOrderUIDs возвращает список всех order_uid из таблицы orders.
 //
 //	Параметры:

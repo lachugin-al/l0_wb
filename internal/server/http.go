@@ -10,6 +10,7 @@ import (
 
 	"go.uber.org/zap"
 	"l0_wb/internal/cache"
+	"l0_wb/internal/kafka"
 	"l0_wb/internal/util"
 )
 
@@ -60,6 +61,8 @@ func NewServer(port string, orderCache *cache.OrderCache, staticDir string) *Ser
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Маршрут для получения заказа по ID
 	mux.HandleFunc("/order/", s.handleGetOrderByID)
+	mux.HandleFunc("/api/orders", s.handleGetOrders)
+	mux.HandleFunc("/api/send-test-order", s.handleSendTestOrder)
 
 	// Статический контент (index.html)
 	if s.staticDir != "" {
@@ -98,6 +101,39 @@ func (s *Server) handleGetOrderByID(w http.ResponseWriter, r *http.Request) {
 		s.logger.Error("Failed to encode response", zap.Error(err))
 		http.Error(w, "failed to encode response", http.StatusInternalServerError)
 	}
+}
+
+// handleGetOrders возвращает список всех заказов из кэша.
+func (s *Server) handleGetOrders(w http.ResponseWriter, r *http.Request) {
+	s.logger.Info("Received request to fetch all orders")
+
+	orders := s.cache.GetAll()
+	if len(orders) == 0 {
+		http.Error(w, "no orders available", http.StatusNotFound)
+		s.logger.Warn("No orders found in cache")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(orders); err != nil {
+		s.logger.Error("Failed to encode orders response", zap.Error(err))
+		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	}
+}
+
+// handleSendTestOrder отправляет тестовый заказ в Kafka.
+func (s *Server) handleSendTestOrder(w http.ResponseWriter, r *http.Request) {
+	s.logger.Info("Received request to send test order")
+
+	orderUID, err := kafka.ProduceTestMessage()
+	if err != nil {
+		s.logger.Error("Failed to send test order", zap.Error(err))
+		http.Error(w, "failed to send test order", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Test order sent successfully! Order UID: " + orderUID))
 }
 
 // handleStatic раздаёт статические файлы из s.staticDir.
