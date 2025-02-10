@@ -14,7 +14,7 @@ import (
 	"l0_wb/internal/util"
 )
 
-const batchSize = 100 // Размер батча
+const batchSize = 1 // Размер батча для тестирования
 
 // Consumer представляет собой Kafka-консумер, который слушает топик с заказами.
 type Consumer struct {
