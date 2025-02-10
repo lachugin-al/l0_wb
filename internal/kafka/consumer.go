@@ -14,6 +14,8 @@ import (
 	"l0_wb/internal/util"
 )
 
+const batchSize = 100 // Размер батча
+
 // Consumer представляет собой Kafka-консумер, который слушает топик с заказами.
 type Consumer struct {
 	reader       *kafka.Reader
@@ -64,6 +66,9 @@ func NewConsumer(brokers []string, topic, groupID string, orderService service.O
 //	- error: ошибку, если произошел сбой при чтении сообщений.
 func (c *Consumer) Run(ctx context.Context) error {
 	c.logger.Info("Kafka consumer started")
+
+	var orders []*model.Order // Изменено на слайс указателей
+
 	for {
 		// Чтение следующего сообщения из топика
 		m, err := c.reader.ReadMessage(ctx)
@@ -82,14 +87,15 @@ func (c *Consumer) Run(ctx context.Context) error {
 			continue
 		}
 
-		// Сохраняем заказ в базу данных через OrderService
-		err = c.orderService.SaveOrder(ctx, &order)
-		if err != nil {
-			c.logger.Error("Failed to save order",
-				zap.String("order_uid", order.OrderUID),
-				zap.Error(err),
-			)
-			continue
+		// Добавляем указатель на заказ в слайс
+		orders = append(orders, &order)
+
+		// Сохраняем батч заказов в базу данных через OrderService
+		if len(orders) >= batchSize {
+			if err := c.orderService.SaveBatch(ctx, orders); err != nil {
+				c.logger.Error("Failed to save batch", zap.Error(err))
+			}
+			orders = nil // Очищаем слайс после сохранения
 		}
 
 		// Если заказ успешно сохранен, добавляем его в кэш

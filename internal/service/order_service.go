@@ -3,11 +3,12 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"l0_wb/internal/model"
 	"l0_wb/internal/repository"
@@ -18,12 +19,14 @@ import (
 type OrderService interface {
 	SaveOrder(ctx context.Context, order *model.Order) error
 
+	SaveBatch(ctx context.Context, orders []*model.Order) error
+
 	GetOrderByID(ctx context.Context, orderUID string) (*model.Order, error)
 }
 
 // orderService является конкретной реализацией интерфейса OrderService.
 type orderService struct {
-	db             *sql.DB
+	db             *pgxpool.Pool
 	ordersRepo     repository.OrdersRepository
 	deliveriesRepo repository.DeliveriesRepository
 	paymentsRepo   repository.PaymentsRepository
@@ -42,7 +45,7 @@ type orderService struct {
 //	Возвращает:
 //	- OrderService: экземпляр сервиса для работы с заказами.
 func NewOrderService(
-	db *sql.DB,
+	db *pgxpool.Pool,
 	ordersRepo repository.OrdersRepository,
 	deliveriesRepo repository.DeliveriesRepository,
 	paymentsRepo repository.PaymentsRepository,
@@ -71,45 +74,59 @@ func NewOrderService(
 //	Возвращает:
 //	- error: ошибка, если произошел сбой на любом этапе.
 func (s *orderService) SaveOrder(ctx context.Context, order *model.Order) error {
-	// Валидация заказа перед сохранением
-	if err := s.validateOrder(order); err != nil {
-		return err
-	}
+	return s.SaveBatch(ctx, []*model.Order{order})
+}
 
-	// Устанавливаем дату создания заказа, если она не указана
-	if order.DateCreated.IsZero() {
-		order.DateCreated = time.Now().UTC()
+// SaveBatch выполняет пакетную вставку заказов в базу данных.
+func (s *orderService) SaveBatch(ctx context.Context, orders []*model.Order) error {
+	if len(orders) == 0 {
+		return nil
 	}
 
 	// Открываем транзакцию
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		s.logger.Error("SaveOrder: begin transaction failed", zap.Error(err))
+		s.logger.Error("SaveBatch: begin transaction failed", zap.Error(err))
 		return fmt.Errorf("begin transaction failed: %w", err)
 	}
 
-	// Отложенный откат транзакции при ошибке
+	// Откат транзакции в случае ошибки
 	defer func() {
 		if p := recover(); p != nil {
-			_ = tx.Rollback()
+			_ = tx.Rollback(ctx)
 			panic(p)
 		} else if err != nil {
-			_ = tx.Rollback()
+			_ = tx.Rollback(ctx)
 		}
 	}()
 
-	// Вставка данных заказа
-	if err = s.insertOrderData(tx, order); err != nil {
-		return err
+	// Вставляем заказы в базу данных
+	for _, order := range orders {
+		// Валидация заказа
+		if err := s.validateOrder(order); err != nil {
+			s.logger.Warn("Invalid order", zap.String("order_uid", order.OrderUID), zap.Error(err))
+			continue
+		}
+
+		// Устанавливаем дату создания заказа, если не указана
+		if order.DateCreated.IsZero() {
+			order.DateCreated = time.Now().UTC()
+		}
+
+		// Вставка данных заказа
+		if err = s.insertOrderData(ctx, tx, order); err != nil {
+			s.logger.Error("Failed to insert order data", zap.String("order_uid", order.OrderUID), zap.Error(err))
+			return err
+		}
 	}
 
-	// Подтверждаем транзакцию
-	if err = tx.Commit(); err != nil {
-		s.logger.Error("SaveOrder: commit transaction failed", zap.String("orderUID", order.OrderUID), zap.Error(err))
+	// Фиксируем транзакцию
+	if err = tx.Commit(ctx); err != nil {
+		s.logger.Error("SaveBatch: commit transaction failed", zap.Error(err))
 		return fmt.Errorf("commit transaction failed: %w", err)
 	}
 
-	s.logger.Info("SaveOrder: order saved successfully", zap.String("orderUID", order.OrderUID))
+	s.logger.Info("SaveBatch: orders saved successfully", zap.Int("batch_size", len(orders)))
 	return nil
 }
 
@@ -144,20 +161,20 @@ func (s *orderService) validateOrder(order *model.Order) error {
 //
 // Возвращает:
 // - error: если произошла ошибка при вставке.
-func (s *orderService) insertOrderData(tx *sql.Tx, order *model.Order) error {
-	if err := s.ordersRepoInsertTx(tx, order); err != nil {
+func (s *orderService) insertOrderData(ctx context.Context, tx pgx.Tx, order *model.Order) error {
+	if err := s.ordersRepoInsertTx(ctx, tx, order); err != nil {
 		return err
 	}
 
-	if err := s.deliveriesRepoInsertTx(tx, &order.Delivery, order.OrderUID); err != nil {
+	if err := s.deliveriesRepoInsertTx(ctx, tx, &order.Delivery, order.OrderUID); err != nil {
 		return err
 	}
 
-	if err := s.paymentsRepoInsertTx(tx, &order.Payment, order.OrderUID); err != nil {
+	if err := s.paymentsRepoInsertTx(ctx, tx, &order.Payment, order.OrderUID); err != nil {
 		return err
 	}
 
-	if err := s.itemsRepoInsertTx(tx, order.Items, order.OrderUID); err != nil {
+	if err := s.itemsRepoInsertTx(ctx, tx, order.Items, order.OrderUID); err != nil {
 		return err
 	}
 
@@ -172,23 +189,23 @@ func (s *orderService) insertOrderData(tx *sql.Tx, order *model.Order) error {
 //	Возвращает:
 //	- *model.Order: объект заказа.
 //	- error: ошибка, если произошел сбой на любом этапе.
-func (s *orderService) GetOrderByID(_ context.Context, orderUID string) (*model.Order, error) {
-	order, err := s.ordersRepo.GetByID(orderUID)
+func (s *orderService) GetOrderByID(ctx context.Context, orderUID string) (*model.Order, error) {
+	order, err := s.ordersRepo.GetByID(ctx, orderUID)
 	if err != nil {
 		return nil, err
 	}
 
-	delivery, err := s.deliveriesRepo.GetByOrderID(orderUID)
+	delivery, err := s.deliveriesRepo.GetByOrderID(ctx, orderUID)
 	if err != nil {
 		return nil, err
 	}
 
-	payment, err := s.paymentsRepo.GetByOrderID(orderUID)
+	payment, err := s.paymentsRepo.GetByOrderID(ctx, orderUID)
 	if err != nil {
 		return nil, err
 	}
 
-	items, err := s.itemsRepo.GetByOrderID(orderUID)
+	items, err := s.itemsRepo.GetByOrderID(ctx, orderUID)
 	if err != nil {
 		return nil, err
 	}
@@ -201,10 +218,10 @@ func (s *orderService) GetOrderByID(_ context.Context, orderUID string) (*model.
 }
 
 // ordersRepoInsertTx вставляет заказ в таблицу orders с использованием транзакции (tx).
-func (s *orderService) ordersRepoInsertTx(tx *sql.Tx, order *model.Order) error {
+func (s *orderService) ordersRepoInsertTx(ctx context.Context, tx pgx.Tx, order *model.Order) error {
 	query := `INSERT INTO orders (order_uid, track_number, entry, locale, internal_signature, customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
-	_, err := tx.Exec(query,
+	_, err := tx.Exec(ctx, query,
 		order.OrderUID,
 		order.TrackNumber,
 		order.Entry,
@@ -224,10 +241,10 @@ func (s *orderService) ordersRepoInsertTx(tx *sql.Tx, order *model.Order) error 
 }
 
 // deliveriesRepoInsertTx вставляет данные доставки в таблицу deliveries с использованием транзакции (tx).
-func (s *orderService) deliveriesRepoInsertTx(tx *sql.Tx, delivery *model.Delivery, orderUID string) error {
+func (s *orderService) deliveriesRepoInsertTx(ctx context.Context, tx pgx.Tx, delivery *model.Delivery, orderUID string) error {
 	query := `INSERT INTO deliveries (order_uid, name, phone, zip, city, address, region, email)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
-	_, err := tx.Exec(query,
+	_, err := tx.Exec(ctx, query,
 		orderUID,
 		delivery.Name,
 		delivery.Phone,
@@ -244,10 +261,10 @@ func (s *orderService) deliveriesRepoInsertTx(tx *sql.Tx, delivery *model.Delive
 }
 
 // paymentsRepoInsertTx вставляет данные оплаты в таблицу payments с использованием транзакции (tx).
-func (s *orderService) paymentsRepoInsertTx(tx *sql.Tx, payment *model.Payment, orderUID string) error {
+func (s *orderService) paymentsRepoInsertTx(ctx context.Context, tx pgx.Tx, payment *model.Payment, orderUID string) error {
 	query := `INSERT INTO payments (order_uid, transaction, request_id, currency, provider, amount, payment_dt, bank, delivery_cost, goods_total, custom_fee)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
-	_, err := tx.Exec(query,
+	_, err := tx.Exec(ctx, query,
 		orderUID,
 		payment.Transaction,
 		payment.RequestID,
@@ -267,12 +284,12 @@ func (s *orderService) paymentsRepoInsertTx(tx *sql.Tx, payment *model.Payment, 
 }
 
 // itemsRepoInsertTx вставляет товары в таблицу items с использованием транзакции (tx).
-func (s *orderService) itemsRepoInsertTx(tx *sql.Tx, items []model.Item, orderUID string) error {
+func (s *orderService) itemsRepoInsertTx(ctx context.Context, tx pgx.Tx, items []model.Item, orderUID string) error {
 	query := `INSERT INTO items (order_uid, chrt_id, track_number, price, rid, name, sale, size, total_price, nm_id, brand, status)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 
 	for _, it := range items {
-		_, err := tx.Exec(query,
+		_, err := tx.Exec(ctx, query,
 			orderUID,
 			it.ChrtID,
 			it.TrackNumber,

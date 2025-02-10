@@ -1,20 +1,20 @@
 package repository
 
 import (
-	"database/sql"
-	"log"
+	"context"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"l0_wb/internal/model"
 )
 
 // ItemsRepository определяет методы для взаимодействия с таблицей 'items'.
 type ItemsRepository interface {
-	Insert(items []model.Item, orderUID string) error
-	GetByOrderID(orderUID string) ([]model.Item, error)
+	Insert(ctx context.Context, items []model.Item, orderUID string) error
+	GetByOrderID(ctx context.Context, orderUID string) ([]model.Item, error)
 }
 
 type itemsRepository struct {
-	db *sql.DB
+	db *pgxpool.Pool
 }
 
 // NewItemsRepository создает новый экземпляр ItemsRepository.
@@ -23,7 +23,7 @@ type itemsRepository struct {
 //	- db: подключение к базе данных (sql.DB).
 //	Возвращает:
 //	- ItemsRepository: экземпляр интерфейса для взаимодействия с таблицей 'items'.
-func NewItemsRepository(db *sql.DB) ItemsRepository {
+func NewItemsRepository(db *pgxpool.Pool) ItemsRepository {
 	return &itemsRepository{db: db}
 }
 
@@ -34,11 +34,11 @@ func NewItemsRepository(db *sql.DB) ItemsRepository {
 //	- orderUID: уникальный идентификатор заказа.
 //	Возвращает:
 //	- error: ошибка при выполнении запроса (если возникла).
-func (r *itemsRepository) Insert(items []model.Item, orderUID string) error {
+func (r *itemsRepository) Insert(ctx context.Context, items []model.Item, orderUID string) error {
 	query := `INSERT INTO items (order_uid, chrt_id, track_number, price, rid, name, sale, size, total_price, nm_id, brand, status)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 	for _, it := range items {
-		_, err := r.db.Exec(query,
+		_, err := r.db.Exec(ctx, query,
 			orderUID,
 			it.ChrtID,
 			it.TrackNumber,
@@ -66,18 +66,14 @@ func (r *itemsRepository) Insert(items []model.Item, orderUID string) error {
 //	Возвращает:
 //	- []model.Item: массив объектов товаров, если записи найдены.
 //	- error: ошибка при выполнении запроса (если возникла).
-func (r *itemsRepository) GetByOrderID(orderUID string) ([]model.Item, error) {
+func (r *itemsRepository) GetByOrderID(ctx context.Context, orderUID string) ([]model.Item, error) {
 	query := `SELECT chrt_id, track_number, price, rid, name, sale, size, total_price, nm_id, brand, status
               FROM items WHERE order_uid = $1`
-	rows, err := r.db.Query(query, orderUID)
+	rows, err := r.db.Query(ctx, query, orderUID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("failed to close rows: %v", err)
-		}
-	}()
+	defer rows.Close()
 
 	var items []model.Item
 	for rows.Next() {

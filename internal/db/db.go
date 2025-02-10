@@ -2,13 +2,13 @@
 package db
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
-	// Importing postgres driver for database/sql
-	_ "github.com/lib/pq"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"go.uber.org/zap"
 	"l0_wb/internal/config"
 	"l0_wb/internal/util"
@@ -17,9 +17,9 @@ import (
 // InitDB инициализирует подключение к базе данных, используя переданную конфигурацию.
 //
 //	Возвращает:
-//	- *sql.DB: экземпляр подключения к базе данных.
+//	- *pgxpool.Pool: пул соединений к базе данных.
 //	- error: ошибка, если не удалось установить подключение.
-func InitDB(cfg *config.Config) (*sql.DB, error) {
+func InitDB(cfg *config.Config) (*pgxpool.Pool, error) {
 	logger := util.GetLogger()
 
 	// Формируем строку подключения на основе конфигурации.
@@ -31,27 +31,43 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 		cfg.DBName,
 	)
 
-	// Открываем подключение к БД.
-	db, err := sql.Open("postgres", dsn)
+	// Настройки пула соединений.
+	poolConfig, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		logger.Error("Failed to open DB connection", zap.Error(err))
-		return nil, fmt.Errorf("failed to open DB connection: %w", err)
+		logger.Error("Failed to parse DB config", zap.Error(err))
+		return nil, fmt.Errorf("failed to parse DB config: %w", err)
 	}
 
-	// Проверяем подключение.
-	if err := db.Ping(); err != nil {
+	poolConfig.MaxConns = 500                       // Максимальное количество соединений
+	poolConfig.MinConns = 100                       // Минимальное количество соединений
+	poolConfig.HealthCheckPeriod = 30 * time.Second // Проверка соединений раз в 30 сек
+	poolConfig.MaxConnLifetime = 5 * time.Minute    // Соединения живут не более 5 минут
+	poolConfig.MaxConnIdleTime = 1 * time.Minute    // Простой соединения не больше 1 минуты
+
+	// Создаем пул соединений
+	dbPool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
+	if err != nil {
+		logger.Error("Failed to create DB pool", zap.Error(err))
+		return nil, fmt.Errorf("failed to create DB pool: %w", err)
+	}
+
+	// Проверяем подключение
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := dbPool.Ping(ctx); err != nil {
 		logger.Error("Failed to ping DB", zap.Error(err))
 		return nil, fmt.Errorf("failed to ping DB: %w", err)
 	}
 
 	// Выполняем миграции.
-	if err := runMigrations(db); err != nil {
+	if err := runMigrations(dbPool); err != nil {
 		logger.Error("Failed to run migrations", zap.Error(err))
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
 	logger.Info("Database initialized successfully")
-	return db, nil
+	return dbPool, nil
 }
 
 // runMigrations выполняет SQL-миграции.
@@ -59,7 +75,7 @@ func InitDB(cfg *config.Config) (*sql.DB, error) {
 //	Данный метод опционален и зависит от потребностей проекта.
 //	Возвращает:
 //	- error: ошибка, если не удалось применить миграции.
-func runMigrations(db *sql.DB) error {
+func runMigrations(db *pgxpool.Pool) error {
 	logger := util.GetLogger()
 	migrationsDir := "internal/db/migrations"
 
@@ -103,7 +119,7 @@ func runMigrations(db *sql.DB) error {
 		}
 
 		// Выполняем SQL-запрос
-		if _, err := db.Exec(string(content)); err != nil {
+		if _, err := db.Exec(context.Background(), string(content)); err != nil {
 			logger.Error("Failed to execute migration", zap.String("file", absFile), zap.Error(err))
 			return fmt.Errorf("failed to execute migration %s: %w", absFile, err)
 		}

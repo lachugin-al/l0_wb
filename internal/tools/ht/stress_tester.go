@@ -66,7 +66,10 @@ func RunStressTest(url string, rate, duration int, output string) error {
 	metrics.Close()
 
 	// Разрешенная директория
-	allowedDir := "/app/results/"
+	allowedDir, err := os.Getwd()
+	if err != nil {
+		return fmt.Errorf("failed to get current working directory: %w", err)
+	}
 
 	// Очистка пути
 	cleanPath := filepath.Clean(output)

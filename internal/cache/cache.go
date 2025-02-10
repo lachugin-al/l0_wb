@@ -3,8 +3,7 @@ package cache
 
 import (
 	"context"
-	"database/sql"
-	"log"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"sync"
 
 	"go.uber.org/zap"
@@ -49,13 +48,13 @@ func (c *OrderCache) LoadFromDB(
 	deliveriesRepo repository.DeliveriesRepository,
 	paymentsRepo repository.PaymentsRepository,
 	itemsRepo repository.ItemsRepository,
-	db *sql.DB,
+	db *pgxpool.Pool,
 ) error {
 	c.logger.Info("Starting to load orders into cache")
 	// TODO если нет возможности получить все order_uid из БД, реализовать метод GetAllOrderIDs() из ordersRepo
 
 	// Получаем список всех order_uid из БД
-	orderUIDs, err := getAllOrderUIDs(db)
+	orderUIDs, err := getAllOrderUIDs(ctx, db)
 	if err != nil {
 		c.logger.Error("Failed to fetch order UIDs from database", zap.Error(err))
 		return err
@@ -118,27 +117,27 @@ func (c *OrderCache) Set(order *model.Order) {
 //	- *model.Order: заполненный объект заказа.
 //	- error: ошибку, если не удалось загрузить данные.
 func loadFullOrder(
-	_ context.Context,
+	ctx context.Context,
 	orderUID string,
 	ordersRepo repository.OrdersRepository,
 	deliveriesRepo repository.DeliveriesRepository,
 	paymentsRepo repository.PaymentsRepository,
 	itemsRepo repository.ItemsRepository,
 ) (*model.Order, error) {
-	o, err := ordersRepo.GetByID(orderUID)
+	o, err := ordersRepo.GetByID(ctx, orderUID)
 	if err != nil {
 		return nil, err
 	}
 
-	d, err := deliveriesRepo.GetByOrderID(orderUID)
+	d, err := deliveriesRepo.GetByOrderID(ctx, orderUID)
 	if err != nil {
 		return nil, err
 	}
-	p, err := paymentsRepo.GetByOrderID(orderUID)
+	p, err := paymentsRepo.GetByOrderID(ctx, orderUID)
 	if err != nil {
 		return nil, err
 	}
-	it, err := itemsRepo.GetByOrderID(orderUID)
+	it, err := itemsRepo.GetByOrderID(ctx, orderUID)
 	if err != nil {
 		return nil, err
 	}
@@ -169,20 +168,17 @@ func (c *OrderCache) GetAll() []*model.Order {
 // getAllOrderUIDs возвращает список всех order_uid из таблицы orders.
 //
 //	Параметры:
+//	- ctx: контекст выполнения.
 //	- db: подключение к базе данных.
 //	Возвращает:
 //	- []string: список order_uid.
 //	- error: ошибку, если не удалось выполнить запрос.
-func getAllOrderUIDs(db *sql.DB) ([]string, error) {
-	rows, err := db.Query(`SELECT order_uid FROM orders`)
+func getAllOrderUIDs(ctx context.Context, db *pgxpool.Pool) ([]string, error) {
+	rows, err := db.Query(ctx, `SELECT order_uid FROM orders`)
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			log.Printf("failed to close rows: %v", err)
-		}
-	}()
+	defer rows.Close()
 
 	var uids []string
 	for rows.Next() {

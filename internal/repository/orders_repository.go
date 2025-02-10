@@ -1,20 +1,21 @@
 package repository
 
 import (
-	"database/sql"
+	"context"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"l0_wb/internal/model"
 )
 
 // OrdersRepository определяет методы для взаимодействия с таблицей 'orders'.
 type OrdersRepository interface {
-	Insert(order *model.Order) error
-	GetByID(orderUID string) (*model.Order, error)
+	Insert(ctx context.Context, order *model.Order) error
+	GetByID(ctx context.Context, orderUID string) (*model.Order, error)
 }
 
 type ordersRepository struct {
-	db *sql.DB
+	db *pgxpool.Pool
 }
 
 // NewOrdersRepository создает новый экземпляр OrdersRepository.
@@ -23,7 +24,7 @@ type ordersRepository struct {
 //	- db: подключение к базе данных (sql.DB).
 //	Возвращает:
 //	- OrdersRepository: экземпляр интерфейса для взаимодействия с таблицей 'orders'.
-func NewOrdersRepository(db *sql.DB) OrdersRepository {
+func NewOrdersRepository(db *pgxpool.Pool) OrdersRepository {
 	return &ordersRepository{db: db}
 }
 
@@ -33,11 +34,11 @@ func NewOrdersRepository(db *sql.DB) OrdersRepository {
 //	- order: объект model.Order, представляющий данные заказа.
 //	Возвращает:
 //	- error: ошибка при выполнении запроса (если возникла).
-func (r *ordersRepository) Insert(order *model.Order) error {
+func (r *ordersRepository) Insert(ctx context.Context, order *model.Order) error {
 	query := `INSERT INTO orders (order_uid, track_number, entry, locale, internal_signature, customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
-	_, err := r.db.Exec(query,
+	_, err := r.db.Exec(ctx, query,
 		order.OrderUID,
 		order.TrackNumber,
 		order.Entry,
@@ -60,11 +61,11 @@ func (r *ordersRepository) Insert(order *model.Order) error {
 //	Возвращает:
 //	- *model.Order: объект заказа, если запись найдена.
 //	- error: ошибка при выполнении запроса (если возникла) или sql.ErrNoRows, если запись не найдена.
-func (r *ordersRepository) GetByID(orderUID string) (*model.Order, error) {
+func (r *ordersRepository) GetByID(ctx context.Context, orderUID string) (*model.Order, error) {
 	query := `SELECT order_uid, track_number, entry, locale, internal_signature, customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard
               FROM orders WHERE order_uid = $1`
 
-	row := r.db.QueryRow(query, orderUID)
+	row := r.db.QueryRow(ctx, query, orderUID)
 	var o model.Order
 	var dateCreated time.Time
 

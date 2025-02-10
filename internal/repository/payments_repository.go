@@ -1,19 +1,20 @@
 package repository
 
 import (
-	"database/sql"
+	"context"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"l0_wb/internal/model"
 )
 
 // PaymentsRepository определяет методы для взаимодействия с таблицей 'payments'.
 type PaymentsRepository interface {
-	Insert(payment *model.Payment, orderUID string) error
-	GetByOrderID(orderUID string) (*model.Payment, error)
+	Insert(ctx context.Context, payment *model.Payment, orderUID string) error
+	GetByOrderID(ctx context.Context, orderUID string) (*model.Payment, error)
 }
 
 type paymentsRepository struct {
-	db *sql.DB
+	db *pgxpool.Pool
 }
 
 // NewPaymentsRepository создает новый экземпляр PaymentsRepository.
@@ -22,7 +23,7 @@ type paymentsRepository struct {
 //	- db: подключение к базе данных (sql.DB).
 //	Возвращает:
 //	- PaymentsRepository: экземпляр интерфейса для взаимодействия с таблицей 'payments'.
-func NewPaymentsRepository(db *sql.DB) PaymentsRepository {
+func NewPaymentsRepository(db *pgxpool.Pool) PaymentsRepository {
 	return &paymentsRepository{db: db}
 }
 
@@ -33,11 +34,11 @@ func NewPaymentsRepository(db *sql.DB) PaymentsRepository {
 //	- orderUID: уникальный идентификатор заказа.
 //	Возвращает:
 //	- error: ошибка при выполнении запроса (если возникла).
-func (r *paymentsRepository) Insert(payment *model.Payment, orderUID string) error {
+func (r *paymentsRepository) Insert(ctx context.Context, payment *model.Payment, orderUID string) error {
 	query := `INSERT INTO payments (order_uid, transaction, request_id, currency, provider, amount, payment_dt, bank, delivery_cost, goods_total, custom_fee)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
-	_, err := r.db.Exec(query,
+	_, err := r.db.Exec(ctx, query,
 		orderUID,
 		payment.Transaction,
 		payment.RequestID,
@@ -60,10 +61,10 @@ func (r *paymentsRepository) Insert(payment *model.Payment, orderUID string) err
 //	Возвращает:
 //	- *model.Payment: объект платежа, если запись найдена.
 //	- error: ошибка при выполнении запроса (если возникла) или sql.ErrNoRows, если запись не найдена.
-func (r *paymentsRepository) GetByOrderID(orderUID string) (*model.Payment, error) {
+func (r *paymentsRepository) GetByOrderID(ctx context.Context, orderUID string) (*model.Payment, error) {
 	query := `SELECT transaction, request_id, currency, provider, amount, payment_dt, bank, delivery_cost, goods_total, custom_fee
               FROM payments WHERE order_uid = $1`
-	row := r.db.QueryRow(query, orderUID)
+	row := r.db.QueryRow(ctx, query, orderUID)
 	var p model.Payment
 	err := row.Scan(
 		&p.Transaction,
