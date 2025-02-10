@@ -7,6 +7,8 @@
 - Restores the cache from the database after a service restart.
 - Provides an HTTP endpoint to fetch order data by `order_uid`.
 - Offers a simple web interface to view order details.
+- Collects and exposes Prometheus metrics for monitoring.
+- Integrates with Grafana for visualization.
 
 ### Project Structure
 ```
@@ -24,11 +26,13 @@ l0_wb/
 │   ├── cache/                 # In-memory order caching
 │   ├── kafka/                 # Kafka consumer and producer modules
 │   ├── server/                # HTTP server and routes
+│   ├── metrics/               # Prometheus metrics collection
 │   ├── tools/                 # Utility scripts
 │   └── util/                  # Utilities
 │
 ├── web/                       # Static content (index.html)
 ├── docker-compose.yml
+├── prometheus.yml             # Prometheus configuration
 ├── Makefile
 ├── go.mod
 └── go.sum
@@ -101,6 +105,25 @@ l0_wb/
     - Loads the cache from the database.
     - Starts the Kafka consumer to read new orders.
     - Starts the HTTP server at `http://localhost:8081`.
+    - Exposes Prometheus metrics at http://localhost:9100/metrics.
+
+### Monitoring with Prometheus and Grafana
+#### Prometheus
+- Available at: http://localhost:9090
+- Automatically scrapes:
+  - http://localhost:9100/metrics (Application metrics)
+  - http://localhost:9187/metrics (PostgreSQL metrics)
+  - http://localhost:9308/metrics (Kafka metrics)
+
+#### Grafana
+- Available at: http://localhost:3000
+- Default login:
+  - Username: admin
+  - Password: admin (can be changed in .env)
+- Preconfigured dashboards:
+  - Application Metrics
+  - Kafka Consumer Lag
+  - Database Query Performance
 
 ### Verifying Application Functionality
 - Open the browser and navigate to `http://localhost:8081`. You will see a simple page to input an `order_uid`.
@@ -139,6 +162,13 @@ To stop the services and the application:
   docker-compose down
 ```
 
+### Environment Variables
+Variables are loaded from .env:
+```
+POSTGRES_USER=<*****>
+POSTGRES_PASSWORD=<*****>
+POSTGRES_DB=<*****>
+```
 
 # L0 WB
 
