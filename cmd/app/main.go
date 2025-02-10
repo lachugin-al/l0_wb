@@ -3,8 +3,10 @@ package main
 
 import (
 	"context"
+	"l0_wb/internal/metrics"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"go.uber.org/zap"
@@ -69,9 +71,26 @@ func main() {
 
 	// Запуск Kafka-консьюмера для получения новых заказов
 	consumer := kafka.NewConsumer(cfg.KafkaBrokers, cfg.KafkaTopic, cfg.KafkaGroupID, orderService, orderCache)
+
+	// Инициализация метрик Prometheus
+	metrics.Init()
+
+	// Используем sync.WaitGroup для управления запущенными горутинами
+	var wg sync.WaitGroup
+
+	// Запуск сервера метрик на порту 9100
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
+		metrics.StartMetricsServer("9100", &wg)
+	}()
+
+	// Запуск Kafka-консьюмера для получения новых заказов
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
 		if err := consumer.Run(ctx); err != nil {
-			logger.Fatal("kafka consumer stopped with error: %v", zap.Error(err))
+			logger.Fatal("kafka consumer stopped with error", zap.Error(err))
 			cancel()
 		}
 	}()
@@ -80,7 +99,15 @@ func main() {
 	// Раздача статических файлов из директории "web".
 	srv := server.NewServer(cfg.HTTPPort, orderCache, "web")
 
-	if err := srv.Start(ctx); err != nil {
-		logger.Fatal("http server stopped with error: %v", zap.Error(err))
-	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := srv.Start(ctx); err != nil {
+			logger.Fatal("http server stopped with error", zap.Error(err))
+		}
+	}()
+
+	// Ожидание завершения всех горутин
+	wg.Wait()
+	logger.Info("Application stopped")
 }
