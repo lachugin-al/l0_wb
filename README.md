@@ -92,20 +92,28 @@ l0_wb/
 ```
 
 ### Running the Project
-1. Start dependencies (PostgreSQL, Zookeeper, Kafka, Kafka UI):
+1. Start all services including the application using Docker Compose:
 ```bash
   docker-compose up -d
 ```
-2. Build and run the application:
-```bash
-  make run
-```
-3. The application is ready for demonstration:
+2. The application is ready for demonstration:
+
+> **Note:** If database migrations are not running properly in Docker, use `make docker-compose-rebuild` to rebuild the Docker image with the latest changes. This ensures that migration files are properly included in the image.
     - Applies database migrations.
     - Loads the cache from the database.
     - Starts the Kafka consumer to read new orders.
     - Starts the HTTP server at `http://localhost:8081`.
     - Exposes Prometheus metrics at http://localhost:9100/metrics.
+
+Note: If you prefer to run the application outside of Docker for development purposes, you can:
+1. Start only the dependencies:
+```bash
+  docker-compose up -d postgres zookeeper kafka kafka-ui prometheus grafana postgres-exporter kafka-exporter
+```
+2. Build and run the application locally:
+```bash
+  make run
+```
 
 ### Monitoring with Prometheus and Grafana
 #### Prometheus
@@ -161,6 +169,23 @@ To stop the services and the application:
 ```bash
   docker-compose down
 ```
+
+### Makefile Commands
+The project includes several Makefile targets to simplify development and deployment:
+
+#### Standard Commands
+- `make build`: Builds the application locally
+- `make run`: Builds and runs the application locally
+- `make test`: Runs all tests
+- `make lint`: Runs linters
+- `make clean`: Removes the compiled binary
+
+#### Docker Commands
+- `make docker-build`: Builds the Docker image for the application
+- `make docker-run`: Builds and runs the application in a Docker container
+- `make docker-compose-up`: Starts all services using Docker Compose (equivalent to `docker-compose up -d`)
+- `make docker-compose-rebuild`: Rebuilds and restarts all services (equivalent to `docker-compose up -d --build`)
+- `make docker-compose-down`: Stops all services (equivalent to `docker-compose down`)
 
 ### Environment Variables
 Variables are loaded from .env:
@@ -264,19 +289,28 @@ l0_wb/
 ```
 
 ### Запуск проекта
-1. Запустите зависимости (PostgreSQL, Zookeeper, Kafka, Kafka UI):
+1. Запустите все сервисы, включая приложение, используя Docker Compose:
 ```bash
   docker-compose up -d
 ```
-2. Соберите и запустите приложение:
-```bash
-  make run
-```
-3. Приложение готово к демонстрации:
+2. Приложение готово к демонстрации:
+
+> **Примечание:** Если миграции базы данных не запускаются корректно в Docker, используйте `make docker-compose-rebuild` для пересборки Docker-образа с последними изменениями. Это гарантирует, что файлы миграций правильно включены в образ.
     - Применит миграции к БД.
     - Загрузит кэш из БД.
     - Запустит Kafka-консьюмер для чтения новых заказов.
     - Поднимет HTTP-сервер по адресу http://localhost:8081.
+    - Предоставит метрики Prometheus по адресу http://localhost:9100/metrics.
+
+Примечание: Если вы предпочитаете запускать приложение вне Docker для целей разработки, вы можете:
+1. Запустить только зависимости:
+```bash
+  docker-compose up -d postgres zookeeper kafka kafka-ui prometheus grafana postgres-exporter kafka-exporter
+```
+2. Собрать и запустить приложение локально:
+```bash
+  make run
+```
 
 ### Мониторинг с помощью Prometheus и Grafana
 #### Prometheus
@@ -328,3 +362,20 @@ l0_wb/
 ```bash
   docker-compose down
 ```
+
+### Команды Makefile
+Проект включает несколько целей Makefile для упрощения разработки и развертывания:
+
+#### Стандартные команды
+- `make build`: Собирает приложение локально
+- `make run`: Собирает и запускает приложение локально
+- `make test`: Запускает все тесты
+- `make lint`: Запускает линтеры
+- `make clean`: Удаляет скомпилированный бинарный файл
+
+#### Docker команды
+- `make docker-build`: Собирает Docker-образ для приложения
+- `make docker-run`: Собирает и запускает приложение в Docker-контейнере
+- `make docker-compose-up`: Запускает все сервисы с помощью Docker Compose (эквивалент `docker-compose up -d`)
+- `make docker-compose-rebuild`: Пересобирает и перезапускает все сервисы (эквивалент `docker-compose up -d --build`)
+- `make docker-compose-down`: Останавливает все сервисы (эквивалент `docker-compose down`)

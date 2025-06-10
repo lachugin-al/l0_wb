@@ -66,6 +66,10 @@ func (s *Server) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/orders", s.handleGetOrders)
 	mux.HandleFunc("/api/send-test-order", s.handleSendTestOrder)
 
+	// Health check endpoint
+	mux.HandleFunc("/health", s.handleHealth)
+	s.logger.Info("Health check endpoint registered")
+
 	// Статический контент (index.html)
 	if s.staticDir != "" {
 		mux.HandleFunc("/", s.handleStatic)
@@ -137,6 +141,20 @@ func (s *Server) handleSendTestOrder(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("Test order sent successfully! Order UID: " + orderUID)); err != nil {
 		log.Printf("failed to write response: %v", err)
+	}
+}
+
+// handleHealth обрабатывает запросы к эндпоинту /health.
+//
+//	Возвращает 200 OK, если сервер работает нормально.
+//	Параметры:
+//	- w: HTTP-ответ.
+//	- r: HTTP-запрос.
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	s.logger.Info("Health check requested")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("OK")); err != nil {
+		s.logger.Error("Failed to write health check response", zap.Error(err))
 	}
 }
 

@@ -88,6 +88,37 @@ services:
     ports:
       - "9308:9308"
 
+  l0_wb:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: l0_wb
+    depends_on:
+      - postgres
+      - kafka
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_NAME: ${POSTGRES_DB}
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_TOPIC: orders
+      KAFKA_GROUP_ID: orders_group
+      HTTP_PORT: 8081
+    ports:
+      - "8081:8081"
+      - "9100:9100"
+    volumes:
+      - ./internal/db/migrations:/app/internal/db/migrations
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
 volumes:
   pgdata:
   grafana-data:

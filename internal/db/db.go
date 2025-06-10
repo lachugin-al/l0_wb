@@ -79,11 +79,27 @@ func runMigrations(db *pgxpool.Pool) error {
 	logger := util.GetLogger()
 	migrationsDir := "internal/db/migrations"
 
+	logger.Info("Starting database migrations", zap.String("migrationsDir", migrationsDir))
+
+	// Check if migrations directory exists
+	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+		logger.Error("Migrations directory does not exist", zap.String("dir", migrationsDir))
+		// Try alternative path
+		migrationsDir = "./internal/db/migrations"
+		logger.Info("Trying alternative migrations path", zap.String("migrationsDir", migrationsDir))
+		if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+			logger.Error("Alternative migrations directory does not exist", zap.String("dir", migrationsDir))
+			return fmt.Errorf("migrations directory does not exist: %s", migrationsDir)
+		}
+	}
+
 	files, err := filepath.Glob(filepath.Join(migrationsDir, "*.sql"))
 	if err != nil {
-		logger.Error("Failed to find migration files", zap.Error(err))
+		logger.Error("Failed to find migration files", zap.Error(err), zap.String("pattern", filepath.Join(migrationsDir, "*.sql")))
 		return fmt.Errorf("failed to find migration files: %w", err)
 	}
+
+	logger.Info("Found migration files", zap.Int("count", len(files)), zap.Strings("files", files))
 
 	// Получаем абсолютный путь к папке миграций.
 	absDir, err := filepath.Abs(migrationsDir)
@@ -92,23 +108,42 @@ func runMigrations(db *pgxpool.Pool) error {
 		return fmt.Errorf("failed to resolve absolute path for migrations directory %s: %w", migrationsDir, err)
 	}
 
+	logger.Info("Resolved absolute path for migrations directory", zap.String("absDir", absDir))
+
 	for _, file := range files {
 		// Очистка пути для предотвращения path traversal атак
 		cleanFile := filepath.Clean(file)
+		logger.Info("Processing migration file", zap.String("file", cleanFile))
+
 		absFile, err := filepath.Abs(cleanFile)
 		if err != nil {
 			logger.Error("Failed to resolve absolute path", zap.String("file", cleanFile), zap.Error(err))
 			return fmt.Errorf("failed to resolve absolute path for %s: %w", cleanFile, err)
 		}
+		logger.Info("Resolved absolute path", zap.String("absFile", absFile))
 
 		// Проверяем, что файл действительно находится в папке миграций
 		relPath, err := filepath.Rel(absDir, absFile)
-		if err != nil || relPath == "" || relPath[0] == '.' {
-			logger.Error("File is outside the migrations directory", zap.String("file", absFile))
-			return fmt.Errorf("file %s is outside the migrations directory", absFile)
+		if err != nil {
+			logger.Error("Failed to get relative path", zap.String("absDir", absDir), zap.String("absFile", absFile), zap.Error(err))
+			return fmt.Errorf("failed to get relative path: %w", err)
 		}
 
+		if relPath == "" || relPath[0] == '.' {
+			logger.Error("File is outside the migrations directory", zap.String("file", absFile), zap.String("relPath", relPath))
+			return fmt.Errorf("file %s is outside the migrations directory", absFile)
+		}
+		logger.Info("File is inside migrations directory", zap.String("relPath", relPath))
+
 		logger.Info("Applying migration", zap.String("file", absFile))
+
+		// Check if file exists and is readable
+		fileInfo, err := os.Stat(absFile)
+		if err != nil {
+			logger.Error("Failed to stat migration file", zap.String("file", absFile), zap.Error(err))
+			return fmt.Errorf("failed to stat migration file %s: %w", absFile, err)
+		}
+		logger.Info("File stats", zap.String("file", absFile), zap.Int64("size", fileInfo.Size()), zap.String("mode", fileInfo.Mode().String()))
 
 		// Безопасное чтение файла
 		//nolint:gosec // Безопасность гарантирована проверкой пути выше
@@ -117,12 +152,15 @@ func runMigrations(db *pgxpool.Pool) error {
 			logger.Error("Failed to read migration file", zap.String("file", absFile), zap.Error(err))
 			return fmt.Errorf("failed to read migration file %s: %w", absFile, err)
 		}
+		logger.Info("Read migration file content", zap.String("file", absFile), zap.Int("contentLength", len(content)))
 
 		// Выполняем SQL-запрос
+		logger.Info("Executing SQL migration", zap.String("file", absFile))
 		if _, err := db.Exec(context.Background(), string(content)); err != nil {
 			logger.Error("Failed to execute migration", zap.String("file", absFile), zap.Error(err))
 			return fmt.Errorf("failed to execute migration %s: %w", absFile, err)
 		}
+		logger.Info("Successfully executed migration", zap.String("file", absFile))
 	}
 
 	logger.Info("All migrations applied successfully")

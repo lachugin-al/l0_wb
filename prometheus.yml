@@ -16,4 +16,4 @@ scrape_configs:
 
   - job_name: 'metrics'
     static_configs:
-      - targets: [ 'localhost:9100' ]
+      - targets: [ 'l0_wb:9100' ]
