@@ -46,11 +46,7 @@ issues:
         - gocyclo # Исключить gocyclo для тестовых файлов.
 
 output:
-  sort-results: true
   formats:
-    github-actions:
-      enabled: true
-      text:
-        enabled: true
-      json:
-        enabled: false # Формат вывода ошибок.
+    text:
+      colors: true
+      print-linter-name: true # Формат вывода ошибок.
