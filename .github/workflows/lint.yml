@@ -17,7 +17,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: "1.23"
+          go-version: "1.23.2"
 
       - name: Clean Go cache
         run: go clean -cache -modcache -testcache -fuzzcache
@@ -28,7 +28,7 @@ jobs:
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v3
         with:
-          version: latest
+          version: v2.2.0
           args: --timeout=5m
           skip-cache: false  # Использует кеширование, уменьшает время билда
 
