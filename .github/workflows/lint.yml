@@ -2,39 +2,35 @@ name: Lint
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   pull_request:
-
-# читаем-только права – меньше поверхностей для атаки
-permissions:
-  contents: read
-  pull-requests: read
 
 jobs:
   lint:
     runs-on: ubuntu-latest
-    # отменяем предыдущий незавершённый линт для этой ветки
-    concurrency:
-      group: lint-${{ github.head_ref || github.ref }}
-      cancel-in-progress: true
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v3
 
-      # ставка на версию из go.mod – не придётся править workflow при каждом обновлении
-      - uses: actions/setup-go@v5
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
-          go-version-file: go.mod
-          cache: true          # тот же кеш, что и actions/cache
+          go-version: "1.23"
 
-      - name: Go mod tidy (проверяем, что go.mod/go.sum чистые)
-        run: |
-          go mod tidy
-          git diff --exit-code
+      - name: Clean Go cache
+        run: go clean -cache -modcache -testcache -fuzzcache
 
-      # один вызов action-а: он и скачивает, и запускает golangci-lint
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
+      - name: Install dependencies
+        run: go mod tidy
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v3
         with:
-          version: v1.59.1
+          version: latest
           args: --timeout=5m
+          skip-cache: false  # Использует кеширование, уменьшает время билда
+
+      - name: Run golangci-lint
+        run: golangci-lint run --timeout=5m

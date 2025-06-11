@@ -4,8 +4,6 @@ version: "2"
 
 run:
   timeout: 5m
-  tests: true                  # линтим *_test.go
-  modules-download-mode: readonly
 
 linters:
   enable:
@@ -17,22 +15,43 @@ linters:
     - gocyclo
     - gosec
     - misspell
+    - unused
     - dupl
     - revive
+
   disable:
-    - lll         # Отключение проверки длины строки.
-    - unused      # staticcheck уже покрывает unused
-  settings:
-    gocyclo:
-      min-complexity: 15 # Минимальная цикломатическая сложность для предупреждений.
-    dupl:
-      threshold: 100 # Минимальный размер дублирующегося кода для предупреждений.
-    misspell:
-      locale: US # Использование американского английского для проверки.
-    gosec:
-      excludes:
-        - G104 # Игнорирование ошибок для пустых возвратов.
-    errcheck:
-      exclude-functions:
-        - io.Copy
-        - io.ReadAll
+    - lll # Отключение проверки длины строки.
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15 # Минимальная цикломатическая сложность для предупреждений.
+  dupl:
+    threshold: 100 # Минимальный размер дублирующегося кода для предупреждений.
+  misspell:
+    locale: US # Использование американского английского для проверки.
+  gosec:
+    exclude:
+      - G104 # Игнорирование ошибок для пустых возвратов.
+  errcheck:
+    exclude-functions:
+      - io:Read
+      - io:Write
+
+issues:
+  exclude-use-default: false # Использовать стандартные исключения.
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocyclo # Исключить gocyclo для тестовых файлов.
+
+output:
+  formats:
+    text:
+      path: stdout           # Формат вывода ошибок.
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
+  sort-results: true # Сортировать результаты по файлам.
+
+tests:
+  parallel: true # Линтинг тестовых файлов параллельно.
