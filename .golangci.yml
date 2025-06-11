@@ -1,6 +1,6 @@
 # golangci-lint configuration file
 # Documentation: https://golangci-lint.run/usage/configuration/
-version: 2
+version: "2"
 
 run:
   timeout: 5m
@@ -20,37 +20,19 @@ linters:
     - dupl
     - revive
   disable:
-    - lll                     # Отключение проверки длины строки.
-    - unused                  # staticcheck уже покрывает unused
-
-linters-settings:
-  gocyclo:
-    min-complexity: 15 # Минимальная цикломатическая сложность для предупреждений.
-  dupl:
-    threshold: 100 # Минимальный размер дублирующегося кода для предупреждений.
-  misspell:
-    locale: US # Использование американского английского для проверки.
-  gosec:
-    exclude:
-      - G104 # Игнорирование ошибок для пустых возвратов.
-  errcheck:
-    exclude-functions:
-      - io.Copy
-      - io.ReadAll
-
-issues:
-  exclude-use-default: false # Использовать стандартные исключения.
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gocyclo # Исключить gocyclo для тестовых файлов.
-
-output:
-  sort-results: true
-  formats:
-    github-actions:
-      enabled: true
-      text:
-        enabled: true
-      json:
-        enabled: false # Формат вывода ошибок.
+    - lll         # Отключение проверки длины строки.
+    - unused      # staticcheck уже покрывает unused
+  settings:
+    gocyclo:
+      min-complexity: 15 # Минимальная цикломатическая сложность для предупреждений.
+    dupl:
+      threshold: 100 # Минимальный размер дублирующегося кода для предупреждений.
+    misspell:
+      locale: US # Использование американского английского для проверки.
+    gosec:
+      excludes:
+        - G104 # Игнорирование ошибок для пустых возвратов.
+    errcheck:
+      exclude-functions:
+        - io.Copy
+        - io.ReadAll

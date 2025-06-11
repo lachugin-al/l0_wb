@@ -34,13 +34,7 @@ jobs:
 
       # один вызов action-а: он и скачивает, и запускает golangci-lint
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: v1.59.0
+          version: v1.59.1
           args: --timeout=5m
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          only-new-issues: false
-          skip-cache: false
-          skip-pkg-cache: false
-          skip-build-cache: false
-          install-mode: binary
