@@ -29,6 +29,6 @@ jobs:
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v8
         with:
-          version: v2
+          version: v2.1
           args: --timeout=5m
           skip-cache: false  # Использует кеширование, уменьшает время билда
