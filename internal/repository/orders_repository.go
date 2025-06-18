@@ -15,7 +15,8 @@ type OrdersRepository interface {
 }
 
 type ordersRepository struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	metrics *MetricsWrapper
 }
 
 // NewOrdersRepository создает новый экземпляр OrdersRepository.
@@ -25,7 +26,10 @@ type ordersRepository struct {
 //	Возвращает:
 //	- OrdersRepository: экземпляр интерфейса для взаимодействия с таблицей 'orders'.
 func NewOrdersRepository(db *pgxpool.Pool) OrdersRepository {
-	return &ordersRepository{db: db}
+	return &ordersRepository{
+		db:      db,
+		metrics: NewMetricsWrapper(),
+	}
 }
 
 // Insert добавляет новую запись о заказе в таблицу 'orders'.
@@ -35,23 +39,25 @@ func NewOrdersRepository(db *pgxpool.Pool) OrdersRepository {
 //	Возвращает:
 //	- error: ошибка при выполнении запроса (если возникла).
 func (r *ordersRepository) Insert(ctx context.Context, order *model.Order) error {
-	query := `INSERT INTO orders (order_uid, track_number, entry, locale, internal_signature, customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard)
+	return r.metrics.RecordDBOperation(ctx, "insert", "orders", true, func(ctx context.Context) error {
+		query := `INSERT INTO orders (order_uid, track_number, entry, locale, internal_signature, customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard)
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
 
-	_, err := r.db.Exec(ctx, query,
-		order.OrderUID,
-		order.TrackNumber,
-		order.Entry,
-		order.Locale,
-		order.InternalSignature,
-		order.CustomerID,
-		order.DeliveryService,
-		order.Shardkey,
-		order.SmID,
-		order.DateCreated,
-		order.OofShard,
-	)
-	return err
+		_, err := r.db.Exec(ctx, query,
+			order.OrderUID,
+			order.TrackNumber,
+			order.Entry,
+			order.Locale,
+			order.InternalSignature,
+			order.CustomerID,
+			order.DeliveryService,
+			order.Shardkey,
+			order.SmID,
+			order.DateCreated,
+			order.OofShard,
+		)
+		return err
+	})
 }
 
 // GetByID получает запись о заказе по его order_uid.
@@ -62,30 +68,37 @@ func (r *ordersRepository) Insert(ctx context.Context, order *model.Order) error
 //	- *model.Order: объект заказа, если запись найдена.
 //	- error: ошибка при выполнении запроса (если возникла) или sql.ErrNoRows, если запись не найдена.
 func (r *ordersRepository) GetByID(ctx context.Context, orderUID string) (*model.Order, error) {
-	query := `SELECT order_uid, track_number, entry, locale, internal_signature, customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard
+	var order *model.Order
+
+	err := r.metrics.RecordDBOperation(ctx, "select", "orders", false, func(ctx context.Context) error {
+		query := `SELECT order_uid, track_number, entry, locale, internal_signature, customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard
               FROM orders WHERE order_uid = $1`
 
-	row := r.db.QueryRow(ctx, query, orderUID)
-	var o model.Order
-	var dateCreated time.Time
+		row := r.db.QueryRow(ctx, query, orderUID)
+		var o model.Order
+		var dateCreated time.Time
 
-	err := row.Scan(
-		&o.OrderUID,
-		&o.TrackNumber,
-		&o.Entry,
-		&o.Locale,
-		&o.InternalSignature,
-		&o.CustomerID,
-		&o.DeliveryService,
-		&o.Shardkey,
-		&o.SmID,
-		&dateCreated,
-		&o.OofShard,
-	)
-	if err != nil {
-		return nil, err
-	}
+		err := row.Scan(
+			&o.OrderUID,
+			&o.TrackNumber,
+			&o.Entry,
+			&o.Locale,
+			&o.InternalSignature,
+			&o.CustomerID,
+			&o.DeliveryService,
+			&o.Shardkey,
+			&o.SmID,
+			&dateCreated,
+			&o.OofShard,
+		)
+		if err != nil {
+			return err
+		}
 
-	o.DateCreated = dateCreated
-	return &o, nil
+		o.DateCreated = dateCreated
+		order = &o
+		return nil
+	})
+
+	return order, err
 }

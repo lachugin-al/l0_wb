@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 	"l0_wb/internal/cache"
 	"l0_wb/internal/kafka"
+	"l0_wb/internal/metrics"
 	"l0_wb/internal/util"
 )
 
@@ -56,23 +57,83 @@ func NewServer(port string, orderCache *cache.OrderCache, staticDir string) *Ser
 	return s
 }
 
+// metricsMiddleware оборачивает HTTP-обработчик для сбора метрик.
+//
+//	Параметры:
+//	- next: следующий обработчик в цепочке.
+//	- endpoint: имя эндпоинта для метрик.
+//	Возвращает:
+//	- http.HandlerFunc: обработчик с метриками.
+func (s *Server) metricsMiddleware(next http.HandlerFunc, endpoint string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		startTime := time.Now()
+
+		// Создаем ResponseWriter, который отслеживает статус ответа
+		rw := &responseWriter{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK, // По умолчанию 200 OK
+		}
+
+		// Вызываем следующий обработчик
+		next(rw, r)
+
+		// Записываем метрики
+		duration := time.Since(startTime)
+		metrics.RecordHTTPRequest(r.Method, endpoint, rw.statusCode, duration)
+
+		// Если произошла ошибка (статус >= 400), записываем ее
+		if rw.statusCode >= 400 {
+			metrics.RecordError("http", endpoint)
+		}
+
+		// Записываем размер ответа как исходящий трафик
+		metrics.RecordNetworkTraffic("out", rw.bytesWritten)
+
+		// Оцениваем размер запроса как входящий трафик
+		contentLength := r.ContentLength
+		if contentLength > 0 {
+			metrics.RecordNetworkTraffic("in", int(contentLength))
+		}
+	}
+}
+
+// responseWriter оборачивает http.ResponseWriter для отслеживания статуса ответа и размера.
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode   int
+	bytesWritten int
+}
+
+// WriteHeader переопределяет метод для отслеживания статуса ответа.
+func (rw *responseWriter) WriteHeader(statusCode int) {
+	rw.statusCode = statusCode
+	rw.ResponseWriter.WriteHeader(statusCode)
+}
+
+// Write переопределяет метод для отслеживания размера ответа.
+func (rw *responseWriter) Write(b []byte) (int, error) {
+	n, err := rw.ResponseWriter.Write(b)
+	rw.bytesWritten += n
+	return n, err
+}
+
 // registerRoutes регистрирует маршруты HTTP для обработки запросов.
 //
 //	Параметры:
 //	- mux: HTTP маршрутизатор (ServeMux).
 func (s *Server) registerRoutes(mux *http.ServeMux) {
 	// Маршрут для получения заказа по ID
-	mux.HandleFunc("/order/", s.handleGetOrderByID)
-	mux.HandleFunc("/api/orders", s.handleGetOrders)
-	mux.HandleFunc("/api/send-test-order", s.handleSendTestOrder)
+	mux.HandleFunc("/order/", s.metricsMiddleware(s.handleGetOrderByID, "/order/{id}"))
+	mux.HandleFunc("/api/orders", s.metricsMiddleware(s.handleGetOrders, "/api/orders"))
+	mux.HandleFunc("/api/send-test-order", s.metricsMiddleware(s.handleSendTestOrder, "/api/send-test-order"))
 
 	// Health check endpoint
-	mux.HandleFunc("/health", s.handleHealth)
+	mux.HandleFunc("/health", s.metricsMiddleware(s.handleHealth, "/health"))
 	s.logger.Info("Health check endpoint registered")
 
 	// Статический контент (index.html)
 	if s.staticDir != "" {
-		mux.HandleFunc("/", s.handleStatic)
+		mux.HandleFunc("/", s.metricsMiddleware(s.handleStatic, "/static"))
 		s.logger.Info("Static content route registered", zap.String("staticDir", s.staticDir))
 	}
 }

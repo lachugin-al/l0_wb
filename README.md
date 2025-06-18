@@ -129,9 +129,17 @@ Note: If you prefer to run the application outside of Docker for development pur
   - Username: admin
   - Password: admin (can be changed in .env)
 - Preconfigured dashboards:
-  - Application Metrics
-  - Kafka Consumer Lag
-  - Database Query Performance
+  - **Application Metrics**: Displays general application metrics including orders processed, HTTP requests, response times, CPU and memory usage, goroutines count, and uptime.
+  - **Database Query Performance**: Shows database-related metrics such as query rates, transaction rates, queries by table, and PostgreSQL statistics.
+  - **Kafka Consumer Lag**: Monitors Kafka consumer lag, message processing rates, and broker metrics to ensure efficient message processing.
+
+To access the dashboards:
+1. Open http://localhost:3000 in your browser
+2. Log in with the credentials above
+3. Click on the "Dashboards" icon in the left sidebar
+4. Select one of the preconfigured dashboards from the list
+
+The dashboards are automatically provisioned when Grafana starts, so no manual setup is required.
 
 ### Verifying Application Functionality
 - Open the browser and navigate to `http://localhost:8081`. You will see a simple page to input an `order_uid`.
@@ -326,9 +334,17 @@ l0_wb/
     - Имя пользователя: admin
     - Пароль: admin (может быть изменен в .env)
 - Предварительно настроенные панели мониторинга:
-    - Application Metrics
-    - Отставание потребителей Kafka
-    - Производительность запросов к базе данных
+    - **Application Metrics**: Отображает общие метрики приложения, включая обработанные заказы, HTTP-запросы, время отклика, использование CPU и памяти, количество горутин и время работы.
+    - **Database Query Performance**: Показывает метрики, связанные с базой данных, такие как скорость запросов, скорость транзакций, запросы по таблицам и статистику PostgreSQL.
+    - **Kafka Consumer Lag**: Мониторит отставание потребителей Kafka, скорость обработки сообщений и метрики брокера для обеспечения эффективной обработки сообщений.
+
+Для доступа к панелям мониторинга:
+1. Откройте http://localhost:3000 в браузере
+2. Войдите, используя учетные данные выше
+3. Нажмите на значок "Dashboards" в левой боковой панели
+4. Выберите одну из предварительно настроенных панелей мониторинга из списка
+
+Панели мониторинга автоматически настраиваются при запуске Grafana, поэтому ручная настройка не требуется.
 
 ### Проверка работы приложения
 - Перейти в браузере по адресу http://localhost:8081. Отобразится простая страница для ввода order_uid.
